@@ -1,0 +1,9 @@
+# GitHub Pages configuration for the student site.
+#
+# Everything listed under `exclude` is left out of the published site. Do not
+# add a .nojekyll file: that disables Jekyll, and with it these exclude rules.
+
+exclude:
+  - tests/
+  - package.json
+  - README.md

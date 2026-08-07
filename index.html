@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Student entry point for the movie-ticket pricing exercise. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#12343b">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    >
+    <title>The Movie Ticket Pricing Challenge</title>
+    <meta
+      name="description"
+      content="A concrete classroom game about general admission and verified student ticket pricing."
+    >
+    <link rel="stylesheet" href="styles.css">
+    <script defer src="game-logic.js"></script>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#app">Skip to the activity</a>
+    <main id="app" tabindex="-1" aria-live="polite">
+      <div class="page-shell page-shell--narrow">
+        <section class="card boot-message">
+          <span class="eyebrow">Starting the activity</span>
+          <h1>Opening the box office…</h1>
+          <p>If this message remains after a few seconds, reload the page.</p>
+        </section>
+      </div>
+    </main>
+    <noscript>
+      <div class="noscript-message">
+        This activity needs JavaScript to calculate the room’s results. Please enable
+        JavaScript and reload the page.
+      </div>
+    </noscript>
+  </body>
+</html>
