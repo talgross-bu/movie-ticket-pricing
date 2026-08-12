@@ -128,16 +128,18 @@ test("reports are checked without returning the incorrect market", () => {
   );
 });
 
-test("groups of three and four expose exactly one controller", () => {
+test("groups of three and four expose exactly one spokesperson first", () => {
   for (const groupSize of [3, 4]) {
     const roles = rolesForGroup(groupSize);
     assert.equal(roles.length, groupSize);
-    assert.equal(roles.filter((role) => role.isController).length, 1);
+    assert.equal(roles[0].title, "Spokesperson");
+    assert.equal(roles[0].isSpokesperson, true);
+    assert.equal(roles.filter((role) => role.isSpokesperson).length, 1);
     assert.equal(roles.filter((role) => role.id.endsWith("market")).length, 2);
   }
 });
 
-test("stored controller state survives normalization and invalid attempts do not", () => {
+test("stored spokesperson state survives normalization and invalid attempts do not", () => {
   const initial = makeInitialState();
   const validUniform = makeUniformAttempt(8, 3, 0);
   const validGroup = makeGroupAttempt(8, 3, 4, 3);

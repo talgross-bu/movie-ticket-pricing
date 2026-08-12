@@ -46,4 +46,4 @@ Licensed under [CC BY 4.0](LICENSE). You are welcome to reuse and adapt the exer
 
 ## Data and recovery
 
-The application makes no network requests after its static files load. It stores only the current device's group size, role, controller attempts, phase, and completion flag in `localStorage`. No result is submitted or copied. If local storage is unavailable, the game continues with an on-screen warning but cannot recover after refresh.
+The application makes no network requests after its static files load. It stores only the current device's group size, role, spokesperson attempts, phase, and completion flag in `localStorage`. No result is submitted or copied. If local storage is unavailable, the game continues with an on-screen warning but cannot recover after refresh.

@@ -62,6 +62,70 @@ test("the student experience contains no timer implementation", async () => {
   assert.doesNotMatch(combined, /timer|countdown|time remaining/i);
 });
 
+test("the spokesperson assigns the other roles in every room size", async () => {
+  const [appSource, logicSource] = await Promise.all([
+    source("app.js"),
+    source("game-logic.js"),
+  ]);
+
+  function renderSavedState(groupSize, role, phase) {
+    const appElement = { innerHTML: "", addEventListener() {} };
+    const savedState = JSON.stringify({
+      version: 3,
+      groupSize,
+      role,
+      phase,
+      uniformAttempts: [],
+      groupAttempts: [],
+      completed: false,
+    });
+    const context = createContext({
+      document: {
+        querySelector(selector) {
+          return { "#app": appElement }[selector];
+        },
+      },
+      window: {
+        localStorage: {
+          getItem() { return savedState; },
+          setItem() {},
+          removeItem() {},
+        },
+        scrollTo() {},
+        confirm() { return true; },
+      },
+    });
+
+    new Script(logicSource, { filename: "game-logic.js" }).runInContext(context);
+    new Script(appSource, { filename: "app.js" }).runInContext(context);
+    return appElement.innerHTML;
+  }
+
+  const threePersonRoles = renderSavedState(3, null, "roles");
+  const fourPersonRoles = renderSavedState(4, null, "roles");
+  for (const renderedRoles of [threePersonRoles, fourPersonRoles]) {
+    assert.match(renderedRoles, /Choose a spokesperson first/);
+    assert.match(renderedRoles, /The spokesperson assigns every other role aloud/);
+    assert.match(renderedRoles, /<strong>Spokesperson<\/strong>/);
+    assert.match(renderedRoles, /role-card__badge">Choose first/);
+  }
+  assert.ok(
+    fourPersonRoles.indexOf("Spokesperson") < fourPersonRoles.indexOf("Theater manager"),
+  );
+
+  const threePersonSetup = renderSavedState(3, "combined-controller", "setup");
+  assert.match(threePersonSetup, /assign the other roles, choose every ticket price/);
+  assert.doesNotMatch(threePersonSetup, /Confirm that one person is the theater manager/);
+
+  const fourPersonSetup = renderSavedState(4, "analyst-controller", "setup");
+  assert.match(fourPersonSetup, /assign the other roles, ask the theater manager for each price/);
+  assert.match(fourPersonSetup, /Confirm that one person is the theater manager/);
+
+  assert.match(logicSource, /title: "Spokesperson"/);
+  assert.doesNotMatch(appSource, /The controller|controller’s|>Controller<|ticketing analyst/i);
+  assert.doesNotMatch(logicSource, /title: ".*controller|isController/);
+});
+
 test("discussion requires reasoning before the answer key is revealed", async () => {
   const appSource = await source("app.js");
   assert.match(appSource, /Why did the theater earn more by charging \$8 and leaving three seats empty/);

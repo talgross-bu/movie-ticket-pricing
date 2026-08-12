@@ -29,47 +29,47 @@ const ROLE_OPTIONS = Object.freeze({
   3: Object.freeze([
     Object.freeze({
       id: "combined-controller",
-      title: "Theater manager + controller",
-      subtitle: "Set ticket prices, record sales, and speak for the room",
-      isController: true,
+      title: "Spokesperson",
+      subtitle: "Choose ticket prices, record sales, and speak for the room",
+      isSpokesperson: true,
     }),
     Object.freeze({
       id: "high-market",
       title: "Local movie fans",
       subtitle: "Privately represent three general-admission customers",
-      isController: false,
+      isSpokesperson: false,
     }),
     Object.freeze({
       id: "low-market",
       title: "Verified students",
       subtitle: "Privately represent three student customers",
-      isController: false,
+      isSpokesperson: false,
     }),
   ]),
   4: Object.freeze([
     Object.freeze({
+      id: "analyst-controller",
+      title: "Spokesperson",
+      subtitle: "Record ticket sales, run the activity, and speak for the room",
+      isSpokesperson: true,
+    }),
+    Object.freeze({
       id: "theater-manager",
       title: "Theater manager",
       subtitle: "Choose the ticket prices",
-      isController: false,
-    }),
-    Object.freeze({
-      id: "analyst-controller",
-      title: "Ticketing analyst + controller",
-      subtitle: "Record ticket sales and speak for the room",
-      isController: true,
+      isSpokesperson: false,
     }),
     Object.freeze({
       id: "high-market",
       title: "Local movie fans",
       subtitle: "Privately represent three general-admission customers",
-      isController: false,
+      isSpokesperson: false,
     }),
     Object.freeze({
       id: "low-market",
       title: "Verified students",
       subtitle: "Privately represent three student customers",
-      isController: false,
+      isSpokesperson: false,
     }),
   ]),
 });

@@ -104,7 +104,7 @@ function progressSteps(activeStep) {
   `;
 }
 
-function controllerHeader(activeStep) {
+function spokespersonProgress(activeStep) {
   return progressSteps(activeStep);
 }
 
@@ -153,12 +153,12 @@ function renderLanding() {
         <div class="size-grid">
           <button class="size-card" type="button" data-group-size="3">
             <span class="size-card__number">3</span>
-            <span><strong>Three people</strong><small>One theater manager + two customer groups</small></span>
+            <span><strong>Three people</strong><small>Spokesperson + two customer groups</small></span>
             <span class="size-card__arrow" aria-hidden="true">→</span>
           </button>
           <button class="size-card" type="button" data-group-size="4">
             <span class="size-card__number">4</span>
-            <span><strong>Four people</strong><small>Manager + analyst + two customer groups</small></span>
+            <span><strong>Four people</strong><small>Spokesperson + manager + two customer groups</small></span>
             <span class="size-card__arrow" aria-hidden="true">→</span>
           </button>
         </div>
@@ -179,8 +179,8 @@ function renderRoleSelection() {
     <button class="back-link" type="button" data-action="change-size">← Change group size</button>
     <section class="role-intro">
       <span class="eyebrow">Group of ${state.groupSize}</span>
-      <h1>Choose one role each</h1>
-      <p class="lede">Say your choice aloud before opening it. If two people choose the same role, come back and reassign.</p>
+      <h1>Choose a spokesperson first</h1>
+      <p class="lede">The spokesperson assigns every other role aloud. Then each person opens the role they were assigned.</p>
     </section>
     <div class="role-grid role-grid--${state.groupSize}">
       ${roles
@@ -192,7 +192,7 @@ function renderRoleSelection() {
                 <strong>${role.title}</strong>
                 <small>${role.subtitle}</small>
               </span>
-              ${role.isController ? '<span class="role-card__badge">Controller</span>' : ""}
+              ${role.isSpokesperson ? '<span class="role-card__badge">Choose first</span>' : ""}
               <span class="role-card__arrow" aria-hidden="true">→</span>
             </button>
           `,
@@ -206,17 +206,17 @@ function renderRoleSelection() {
   `);
 }
 
-function renderControllerSetup(role) {
+function renderSpokespersonSetup(role) {
   const isCombined = role.id === "combined-controller";
   app.innerHTML = pageShell(
     `
-      <section class="role-banner role-banner--controller">
+      <section class="role-banner role-banner--spokesperson">
         <span class="role-banner__label">Your role</span>
         <h1>${role.title}</h1>
         <p>${
           isCombined
-            ? "You choose every ticket price, record both groups’ sales, and speak for your room afterward."
-            : "Ask the theater manager for each price, record both groups’ sales, and speak for your room afterward."
+            ? "You assign the other roles, choose every ticket price, record both groups’ sales, and speak for your room afterward."
+            : "You assign the other roles, ask the theater manager for each price, record both groups’ sales, and speak for your room afterward."
         }</p>
       </section>
 
@@ -225,7 +225,7 @@ function renderControllerSetup(role) {
           <span class="step-kicker">Before you start</span>
           <div>
             <h2 id="ready-heading">Get everyone ready</h2>
-            <p>Begin when every student has a different role open.</p>
+            <p>Assign each remaining role aloud. Begin when every student has the assigned role open.</p>
           </div>
         </div>
         <ol class="checklist">
@@ -290,7 +290,7 @@ function renderUniformPhase() {
   const count = state.uniformAttempts.length;
   const complete = count === ATTEMPTS_PER_TREATMENT;
   app.innerHTML = pageShell(`
-    ${controllerHeader("uniform")}
+    ${spokespersonProgress("uniform")}
     <section class="phase-heading">
       <div>
         <span class="eyebrow">Treatment 1 of 2</span>
@@ -344,7 +344,7 @@ function renderGroupPhase() {
   const count = state.groupAttempts.length;
   const complete = count === ATTEMPTS_PER_TREATMENT;
   app.innerHTML = pageShell(`
-    ${controllerHeader("group")}
+    ${spokespersonProgress("group")}
     <section class="phase-heading">
       <div>
         <span class="eyebrow">Treatment 2 of 2</span>
@@ -420,7 +420,7 @@ function renderReveal() {
   const roomUniform = bestAttempt(state.uniformAttempts);
   const roomGroup = bestAttempt(state.groupAttempts);
   app.innerHTML = pageShell(`
-    ${controllerHeader("reveal")}
+    ${spokespersonProgress("reveal")}
     <section class="reveal-hero">
       <span class="eyebrow">The box office revealed</span>
       <h1>Compare the box-office results before judging them.</h1>
@@ -504,11 +504,11 @@ function baselineFacts() {
 
 function renderDiscussion() {
   app.innerHTML = pageShell(`
-    ${controllerHeader("discussion")}
+    ${spokespersonProgress("discussion")}
     <section class="discussion-hero">
       <span class="eyebrow">Reason before revealing</span>
       <h1>Four questions. No hints.</h1>
-      <p class="lede">The controller reads each question aloud. Work from the observed results and show your calculations.</p>
+      <p class="lede">The spokesperson reads each question aloud. Work from the observed results and show your calculations.</p>
     </section>
 
     ${baselineFacts()}
@@ -522,9 +522,9 @@ function renderDiscussion() {
 }
 
 function renderAnswerKey(role) {
-  const isController = role.isController;
+  const isSpokesperson = role.isSpokesperson;
   app.innerHTML = pageShell(`
-    ${isController ? controllerHeader("discussion") : ""}
+    ${isSpokesperson ? spokespersonProgress("discussion") : ""}
     <section class="reveal-hero">
       <span class="eyebrow">Answer key</span>
       <h1>The lesson changes when one value changes.</h1>
@@ -586,12 +586,12 @@ function renderAnswerKey(role) {
 
     <section class="report-card ${state.completed ? "report-card--ready" : ""}">
       <div>
-        <span class="eyebrow">${isController ? "Spokesperson" : "Your room"}</span>
-        <h2>${state.completed ? "Your room is ready." : isController ? "Be ready if your instructor calls on you." : "Help your spokesperson choose one takeaway."}</h2>
+        <span class="eyebrow">${isSpokesperson ? "Spokesperson" : "Your room"}</span>
+        <h2>${state.completed ? "Your room is ready." : isSpokesperson ? "Be ready if your instructor calls on you." : "Help your spokesperson choose one takeaway."}</h2>
         <p>No result is submitted. Be ready to explain why the two examples produce different total-surplus results.</p>
       </div>
       ${
-        isController
+        isSpokesperson
           ? state.completed
             ? '<span class="ready-check" aria-label="Ready">✓</span>'
             : '<button class="button button--primary" type="button" data-action="mark-ready">We are ready to report</button>'
@@ -647,7 +647,7 @@ function renderMarketRole(role) {
         <div id="demand-error" class="form-error" role="alert"></div>
         <div id="demand-answer" class="demand-answer" aria-live="polite">
           <span>Waiting for a price</span>
-          <p>The controller will ask for your answer three times in each treatment.</p>
+          <p>The spokesperson will ask for your answer three times in each treatment.</p>
         </div>
       </section>
 
@@ -657,11 +657,11 @@ function renderMarketRole(role) {
           <li>Listen for the price announced to your market.</li>
           <li>Report how many of your three customers buy: 0, 1, 2, or 3.</li>
           <li>Do not suggest ticket prices or reveal willingness to pay during play.</li>
-          <li>Follow the controller’s phase announcements.</li>
+          <li>Follow the spokesperson’s phase announcements.</li>
         </ul>
       </section>
       <section class="participant-reveal-prompt">
-        <div><strong>Has the controller reached the reveal?</strong><p>Do not open this early—it contains both customer groups’ private information.</p></div>
+        <div><strong>Has the spokesperson reached the reveal?</strong><p>Do not open this early—it contains both customer groups’ private information.</p></div>
         <button class="button button--secondary" type="button" data-action="participant-reveal">Open the final reveal</button>
       </section>
     `,
@@ -675,7 +675,7 @@ function renderManagerRole(role) {
       <section class="role-banner role-banner--ceo">
         <span class="role-banner__label">Your role</span>
         <h1>Theater manager</h1>
-        <p>Your goal is to maximize profit from tonight’s screening. Tell the ticketing analyst what to enter on every attempt.</p>
+        <p>Your goal is to maximize profit from tonight’s screening. Tell the spokesperson what to enter on every attempt.</p>
       </section>
 
       <div class="ceo-layout">
@@ -704,9 +704,9 @@ function renderManagerRole(role) {
         </div>
         <label class="field"><span>Prices or strategy to try next</span><textarea rows="5" placeholder="Example: Try a lower price to reach more customers…"></textarea></label>
       </section>
-      <div class="notice"><strong>Follow the analyst.</strong> They control the phase, calculations, and final reveal.</div>
+      <div class="notice"><strong>Follow the spokesperson.</strong> They run the phases, calculations, and final reveal.</div>
       <section class="participant-reveal-prompt">
-        <div><strong>Has the controller reached the reveal?</strong><p>Do not open this early—it contains both customer groups’ private information.</p></div>
+        <div><strong>Has the spokesperson reached the reveal?</strong><p>Do not open this early—it contains both customer groups’ private information.</p></div>
         <button class="button button--secondary" type="button" data-action="participant-reveal">Open the final reveal</button>
       </section>
     `,
@@ -719,7 +719,7 @@ function renderParticipantReveal(role) {
     <section class="discussion-hero">
       <span class="eyebrow">Reason before revealing</span>
       <h1>Four questions. No hints.</h1>
-      <p class="lede">Help your controller work from the results and show the calculations. Your controller is the room’s spokesperson.</p>
+      <p class="lede">Help your spokesperson work from the results and show the calculations.</p>
     </section>
 
     ${baselineFacts()}
@@ -890,7 +890,7 @@ function render() {
     renderLanding();
   } else if (!role || state.phase === "roles") {
     renderRoleSelection();
-  } else if (!role.isController) {
+  } else if (!role.isSpokesperson) {
     if (state.phase === "answers") {
       renderAnswerKey(role);
     } else if (state.phase === "reveal" || state.phase === "discussion") {
@@ -901,7 +901,7 @@ function render() {
       renderMarketRole(role);
     }
   } else if (state.phase === "setup") {
-    renderControllerSetup(role);
+    renderSpokespersonSetup(role);
   } else if (state.phase === "uniform") {
     renderUniformPhase();
   } else if (state.phase === "group") {
