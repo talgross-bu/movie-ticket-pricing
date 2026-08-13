@@ -157,7 +157,7 @@ test("stored spokesperson state survives normalization and invalid attempts do n
   assert.deepEqual(normalized.groupAttempts, [validGroup]);
 });
 
-test("the answer-key phase survives refresh", () => {
+test("the retired answer-key phase falls back to the landing screen", () => {
   const normalized = normalizeStoredState({
     ...makeInitialState(),
     groupSize: 3,
@@ -165,7 +165,20 @@ test("the answer-key phase survives refresh", () => {
     phase: "answers",
   });
 
-  assert.equal(normalized.phase, "answers");
+  assert.equal(normalized.phase, "landing");
+});
+
+test("checked discussion questions survive refresh and drop invalid entries", () => {
+  const normalized = normalizeStoredState({
+    ...makeInitialState(),
+    groupSize: 3,
+    role: "combined-controller",
+    phase: "discussion",
+    checkedQuestions: [1, 3, 1, "2", 9, 0],
+  });
+
+  assert.deepEqual(normalized.checkedQuestions, [1, 3]);
+  assert.deepEqual(normalizeStoredState(makeInitialState()).checkedQuestions, []);
 });
 
 test("incompatible stored state resets safely", () => {

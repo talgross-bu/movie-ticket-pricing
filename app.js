@@ -19,7 +19,7 @@ const {
   validateUniformReport,
 } = globalThis.TwoMarketsGameLogic;
 
-const STORAGE_KEY = "movie-ticket-pricing-challenge-state-v3";
+const STORAGE_KEY = "movie-ticket-pricing-challenge-state-v4";
 const app = document.querySelector("#app");
 
 let storageAvailable = true;
@@ -424,7 +424,7 @@ function renderReveal() {
     <section class="reveal-hero">
       <span class="eyebrow">The box office revealed</span>
       <h1>Compare the box-office results before judging them.</h1>
-      <p class="lede">Prices, ticket sales, and profit appear now. Consumer surplus and total surplus stay hidden until your group works through the discussion.</p>
+      <p class="lede">Prices, ticket sales, and profit appear now. Consumer surplus and total surplus are for your group to work out in the discussion.</p>
     </section>
 
     <section class="room-result" aria-labelledby="room-result-heading">
@@ -477,13 +477,29 @@ function renderReveal() {
   `);
 }
 
+const DISCUSSION_QUESTIONS = [
+  "Why did the theater earn more by charging $8 and leaving three seats empty than by charging $4 and filling every seat?",
+  "What would happen to the two-price strategy if the theater stopped checking student IDs or allowed tickets to be resold?",
+  "Now suppose the third movie fan would pay only $4 rather than $8—the same as the least eager student. Work out the best one-price policy and the best student-pricing policy. Which one sells more tickets? Does student pricing still increase profit? Does it still increase total surplus?",
+];
+
 function discussionQuestionList() {
   return `
     <ol class="question-list">
-      <li><span>01</span><div><h2>Why did the theater earn more by charging $8 and leaving three seats empty than by charging $4 and filling every seat?</h2></div></li>
-      <li><span>02</span><div><h2>What would happen to the two-price strategy if the theater stopped checking student IDs or allowed tickets to be resold?</h2></div></li>
-      <li><span>03</span><div><h2>When the $4 student ticket was introduced, whose surplus changed—and by how much? Where did the increase in total surplus come from?</h2></div></li>
-      <li><span>04</span><div><h2>Now suppose the third movie fan would pay only $5 rather than $8. Recalculate the best one-price and student-pricing outcomes. Does student pricing still increase profit? Does it still increase total surplus?</h2></div></li>
+      ${DISCUSSION_QUESTIONS.map((question, index) => {
+        const number = index + 1;
+        const isChecked = state.checkedQuestions.includes(number);
+        return `
+          <li class="${isChecked ? "is-checked" : ""}">
+            <span>0${number}</span>
+            <div><h2>${question}</h2></div>
+            <label class="question-check">
+              <input type="checkbox" data-question="${number}" aria-label="Mark question ${number} as discussed"${isChecked ? " checked" : ""}>
+              <span aria-hidden="true">✓</span>
+            </label>
+          </li>
+        `;
+      }).join("")}
     </ol>
   `;
 }
@@ -493,9 +509,10 @@ function baselineFacts() {
     <section class="baseline-facts" aria-label="Facts available for discussion">
       <article><span>One ticket price</span><strong>$8</strong><p>3 tickets sold · $21 theater profit</p></article>
       <article><span>Student pricing</span><strong>$8 general · $4 student</strong><p>6 tickets sold · $30 theater profit</p></article>
+      <p class="formula-note">Each attendee costs the theater $1.</p>
     </section>
     <section class="values-reveal values-reveal--compact">
-      <div><span class="eyebrow">Willingness to pay</span><h2>Use these values in Questions 3 and 4</h2></div>
+      <div><span class="eyebrow">Willingness to pay</span><h2>Use these values in Question 3</h2></div>
       <div class="value-chips"><strong>Movie fans</strong>${MARKETS.high.values.map((value) => `<span>${money(value)}</span>`).join("")}</div>
       <div class="value-chips"><strong>Students</strong>${MARKETS.low.values.map((value) => `<span>${money(value)}</span>`).join("")}</div>
     </section>
@@ -506,98 +523,13 @@ function renderDiscussion() {
   app.innerHTML = pageShell(`
     ${spokespersonProgress("discussion")}
     <section class="discussion-hero">
-      <span class="eyebrow">Reason before revealing</span>
-      <h1>Four questions. No hints.</h1>
+      <span class="eyebrow">Work these out together</span>
+      <h1>Three questions. No hints.</h1>
       <p class="lede">The spokesperson reads each question aloud. Work from the observed results and show your calculations.</p>
     </section>
 
     ${baselineFacts()}
     ${discussionQuestionList()}
-
-    <div class="action-panel action-panel--reveal">
-      <p><strong>Finish Question 4 first.</strong> The next screen contains every calculation and the lesson’s central result.</p>
-      <button class="button button--primary" type="button" data-action="show-answers">We discussed them — reveal answers</button>
-    </div>
-  `);
-}
-
-function renderAnswerKey(role) {
-  const isSpokesperson = role.isSpokesperson;
-  app.innerHTML = pageShell(`
-    ${isSpokesperson ? spokespersonProgress("discussion") : ""}
-    <section class="reveal-hero">
-      <span class="eyebrow">Answer key</span>
-      <h1>The lesson changes when one value changes.</h1>
-      <p class="lede">The original screening shows how student pricing can expand access. The counterfactual shows why that result cannot be generalized.</p>
-    </section>
-
-    <section class="answer-explanations">
-      <article>
-        <span>01 · Empty seats</span>
-        <h2>Lowering one price cuts the margin on every ticket.</h2>
-        <p>At $8, profit is <strong>($8 − $1) × 3 = $21</strong>. At $4, profit is <strong>($4 − $1) × 6 = $18</strong>. Filling the theater is not the same as maximizing profit.</p>
-      </article>
-      <article>
-        <span>02 · Student ID and resale</span>
-        <h2>The theater must identify the group and keep the discount from transferring.</h2>
-        <p>Without ID checks, movie fans claim the $4 ticket. With resale, students can buy low and resell to movie fans. Either route undermines the $8 general-admission price.</p>
-      </article>
-    </section>
-
-    <section class="card answer-table" aria-labelledby="baseline-answer-heading">
-      <span class="eyebrow">03 · Stakeholder ledger</span>
-      <h2 id="baseline-answer-heading">What changed in the original screening?</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Outcome</th><th>One $8 price</th><th>$8 general / $4 student</th><th>Change</th></tr></thead>
-          <tbody>
-            <tr><td>Tickets sold</td><td>3</td><td>6</td><td><strong>+3</strong></td></tr>
-            <tr><td>Theater profit</td><td>$21</td><td>$30</td><td><strong>+$9</strong></td></tr>
-            <tr><td>Movie-fan surplus</td><td>$3</td><td>$3</td><td>$0</td></tr>
-            <tr><td>Student surplus</td><td>$0</td><td>$3</td><td><strong>+$3</strong></td></tr>
-            <tr><td>Total surplus</td><td>$24</td><td>$36</td><td><strong>+$12</strong></td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="calculation-note">The $12 increase in total surplus comes from three new attendees: ($6 − $1) + ($5 − $1) + ($4 − $1) = $12.</p>
-    </section>
-
-    <section class="card answer-table twist-answer" aria-labelledby="twist-answer-heading">
-      <span class="eyebrow">04 · Counterfactual</span>
-      <h2 id="twist-answer-heading">Change the third movie fan from $8 to $5</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Outcome</th><th>Best one-price policy</th><th>Best student-pricing policy</th></tr></thead>
-          <tbody>
-            <tr><td>Prices</td><td>$5 for everyone</td><td>$9 general / $4 student</td></tr>
-            <tr><td>Tickets sold</td><td>5</td><td>5</td></tr>
-            <tr><td>Theater profit</td><td>$20</td><td><strong>$25</strong></td></tr>
-            <tr><td>Consumer surplus</td><td><strong>$10</strong></td><td>$4</td></tr>
-            <tr><td>Total surplus</td><td><strong>$30</strong></td><td>$29</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="calculation-note">Student pricing still raises profit by $5, but total surplus falls by $1. With the same five tickets sold, a movie fan worth $5 is replaced by a student worth $4.</p>
-    </section>
-
-    <div class="notice">
-      <strong>Bottom line:</strong> different prices can expand output and raise total surplus, but they do not always do so. The result depends on who is in each group and how purchasing changes.
-    </div>
-
-    <section class="report-card ${state.completed ? "report-card--ready" : ""}">
-      <div>
-        <span class="eyebrow">${isSpokesperson ? "Spokesperson" : "Your room"}</span>
-        <h2>${state.completed ? "Your room is ready." : isSpokesperson ? "Be ready if your instructor calls on you." : "Help your spokesperson choose one takeaway."}</h2>
-        <p>No result is submitted. Be ready to explain why the two examples produce different total-surplus results.</p>
-      </div>
-      ${
-        isSpokesperson
-          ? state.completed
-            ? '<span class="ready-check" aria-label="Ready">✓</span>'
-            : '<button class="button button--primary" type="button" data-action="mark-ready">We are ready to report</button>'
-          : ""
-      }
-    </section>
   `);
 }
 
@@ -714,21 +646,16 @@ function renderManagerRole(role) {
   );
 }
 
-function renderParticipantReveal(role) {
+function renderParticipantReveal() {
   app.innerHTML = pageShell(`
     <section class="discussion-hero">
-      <span class="eyebrow">Reason before revealing</span>
-      <h1>Four questions. No hints.</h1>
+      <span class="eyebrow">Work these out together</span>
+      <h1>Three questions. No hints.</h1>
       <p class="lede">Help your spokesperson work from the results and show the calculations.</p>
     </section>
 
     ${baselineFacts()}
     ${discussionQuestionList()}
-
-    <div class="action-panel action-panel--reveal">
-      <p><strong>Finish Question 4 first.</strong> The next screen contains every calculation and the lesson’s central result.</p>
-      <button class="button button--primary" type="button" data-action="show-answers">We discussed them — reveal answers</button>
-    </div>
   `);
 }
 
@@ -864,13 +791,28 @@ function handleClick(event) {
     setState({ phase: "reveal" });
   } else if (action === "next-discussion") {
     setState({ phase: "discussion" });
-  } else if (action === "show-answers") {
-    setState({ phase: "answers" });
-  } else if (action === "mark-ready") {
-    setState({ completed: true });
   } else if (action === "participant-reveal") {
     setState({ phase: "reveal" });
   }
+}
+
+function handleQuestionCheck(event) {
+  const box = event.target.closest("[data-question]");
+  if (!box) {
+    return;
+  }
+
+  // The checkbox already shows the new state, so saving it is all that is left.
+  const checked = new Set(state.checkedQuestions);
+  const question = Number(box.dataset.question);
+  if (box.checked) {
+    checked.add(question);
+  } else {
+    checked.delete(question);
+  }
+  state.checkedQuestions = [...checked].sort();
+  persistState();
+  box.closest("li").classList.toggle("is-checked", box.checked);
 }
 
 function handleSubmit(event) {
@@ -891,10 +833,8 @@ function render() {
   } else if (!role || state.phase === "roles") {
     renderRoleSelection();
   } else if (!role.isSpokesperson) {
-    if (state.phase === "answers") {
-      renderAnswerKey(role);
-    } else if (state.phase === "reveal" || state.phase === "discussion") {
-      renderParticipantReveal(role);
+    if (state.phase === "reveal" || state.phase === "discussion") {
+      renderParticipantReveal();
     } else if (role.id === "theater-manager") {
       renderManagerRole(role);
     } else {
@@ -908,14 +848,13 @@ function render() {
     renderGroupPhase();
   } else if (state.phase === "reveal") {
     renderReveal();
-  } else if (state.phase === "discussion") {
-    renderDiscussion();
   } else {
-    renderAnswerKey(role);
+    renderDiscussion();
   }
   window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 app.addEventListener("click", handleClick);
+app.addEventListener("change", handleQuestionCheck);
 app.addEventListener("submit", handleSubmit);
 render();

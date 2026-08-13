@@ -493,8 +493,7 @@ p {
 .card,
 .secret-card,
 .room-result,
-.values-reveal,
-.report-card {
+.values-reveal {
   padding: clamp(1.4rem, 4vw, 2.2rem);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1033,6 +1032,12 @@ tbody tr:last-child td {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.baseline-facts .formula-note {
+  margin: 0;
+  grid-column: 1 / -1;
+  text-align: center;
+}
+
 .baseline-facts article {
   padding: 1.35rem;
   border: 1px solid var(--line);
@@ -1041,8 +1046,7 @@ tbody tr:last-child td {
   box-shadow: var(--shadow);
 }
 
-.baseline-facts article > span,
-.answer-explanations article > span {
+.baseline-facts article > span {
   display: block;
   margin-bottom: 0.4rem;
   color: var(--teal);
@@ -1087,48 +1091,6 @@ tbody tr:last-child td {
   color: rgba(255, 255, 255, 0.78);
 }
 
-.action-panel--reveal {
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.answer-explanations {
-  display: grid;
-  max-width: 900px;
-  margin: 0 auto 1rem;
-  gap: 1rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.answer-explanations article {
-  padding: 1.5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.answer-explanations p {
-  margin-bottom: 0;
-}
-
-.answer-table {
-  max-width: 900px;
-  margin: 0 auto 1rem;
-}
-
-.calculation-note {
-  padding: 0.9rem 1rem;
-  border-radius: var(--radius-small);
-  margin: 1rem 0 0;
-  background: var(--surface-soft);
-  color: var(--ink);
-  font-weight: 700;
-}
-
-.twist-answer {
-  border: 2px solid var(--orange);
-}
-
 .question-list {
   max-width: 900px;
   padding: 0;
@@ -1141,7 +1103,13 @@ tbody tr:last-child td {
   padding: 1.5rem 0;
   border-top: 1px solid var(--line);
   gap: 1rem;
-  grid-template-columns: 60px 1fr;
+  grid-template-columns: 60px 1fr auto;
+  align-items: start;
+}
+
+/* The list now ends the page, so close it with a rule. */
+.question-list li:last-child {
+  border-bottom: 1px solid var(--line);
 }
 
 .question-list li > span {
@@ -1158,35 +1126,50 @@ tbody tr:last-child td {
   margin-bottom: 0;
 }
 
-.report-card {
-  display: flex;
-  max-width: 900px;
-  margin: 0 auto 1.5rem;
-  border: 2px solid var(--teal);
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
+.question-list li.is-checked h2 {
+  opacity: 0.55;
 }
 
-.report-card--ready {
+/* The native checkbox is kept, resized, and stacked under the check glyph. */
+.question-check {
+  display: grid;
+  cursor: pointer;
+  place-items: center;
+}
+
+.question-check input,
+.question-check span {
+  grid-area: 1 / 1;
+  width: 28px;
+  height: 28px;
+}
+
+.question-check input {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0;
+  appearance: none;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.question-check input:checked {
+  border-color: var(--teal);
   background: var(--surface-soft);
 }
 
-.report-card h2,
-.report-card p {
-  margin-bottom: 0;
+.question-check span {
+  display: grid;
+  color: transparent;
+  font-size: 1.05rem;
+  font-weight: 900;
+  place-items: center;
+  pointer-events: none;
 }
 
-.ready-check {
-  display: grid;
-  width: 64px;
-  height: 64px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--teal);
-  color: #fff;
-  font-size: 2rem;
-  place-items: center;
+.question-check input:checked + span {
+  color: var(--teal);
 }
 
 .secret-card {
@@ -1409,8 +1392,7 @@ tbody tr:last-child td {
     flex-wrap: wrap;
   }
 
-  .baseline-facts,
-  .answer-explanations {
+  .baseline-facts {
     grid-template-columns: 1fr;
   }
 }
@@ -1473,7 +1455,6 @@ tbody tr:last-child td {
   }
 
   .action-panel,
-  .report-card,
   .participant-reveal-prompt {
     align-items: stretch;
     flex-direction: column;
@@ -1484,7 +1465,7 @@ tbody tr:last-child td {
   }
 
   .question-list li {
-    grid-template-columns: 42px 1fr;
+    grid-template-columns: 42px 1fr auto;
   }
 
   .customer-values > div {
@@ -1523,8 +1504,7 @@ tbody tr:last-child td {
   .card,
   .secret-card,
   .room-result,
-  .values-reveal,
-  .report-card {
+  .values-reveal {
     box-shadow: none;
   }
 }

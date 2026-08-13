@@ -71,13 +71,13 @@ test("the spokesperson assigns the other roles in every room size", async () => 
   function renderSavedState(groupSize, role, phase) {
     const appElement = { innerHTML: "", addEventListener() {} };
     const savedState = JSON.stringify({
-      version: 3,
+      version: 4,
       groupSize,
       role,
       phase,
       uniformAttempts: [],
       groupAttempts: [],
-      completed: false,
+      checkedQuestions: [],
     });
     const context = createContext({
       document: {
@@ -126,14 +126,15 @@ test("the spokesperson assigns the other roles in every room size", async () => 
   assert.doesNotMatch(logicSource, /title: ".*controller|isController/);
 });
 
-test("discussion requires reasoning before the answer key is revealed", async () => {
+test("the discussion poses three questions and the site holds no answer key", async () => {
   const appSource = await source("app.js");
   assert.match(appSource, /Why did the theater earn more by charging \$8 and leaving three seats empty/);
   assert.match(appSource, /stopped checking student IDs or allowed tickets to be resold/);
-  assert.match(appSource, /whose surplus changed—and by how much/);
-  assert.match(appSource, /third movie fan would pay only \$5 rather than \$8/);
-  assert.match(appSource, /data-action="show-answers"/);
-  assert.match(appSource, /setState\(\{ phase: "answers" \}\)/);
+  assert.match(appSource, /third movie fan would pay only \$4 rather than \$8/);
+  assert.match(appSource, /Each attendee costs the theater \$1\./);
+  assert.doesNotMatch(appSource, /whose surplus changed/);
+  assert.doesNotMatch(appSource, /reveal answers/i);
+  assert.doesNotMatch(appSource, /renderAnswerKey|phase: "answers"|Answer key|Bottom line/);
   assert.doesNotMatch(appSource, /Think about student ID checks/);
   assert.doesNotMatch(appSource, /Connect the discount to willingness to pay/);
 });
@@ -184,22 +185,22 @@ test("classic scripts execute in order and render the landing screen", async () 
   assert.match(appElement.innerHTML, /How many people are in your breakout room\?/);
 });
 
-test("saved discussion and answer-key states render their intended content", async () => {
+test("the saved discussion state renders three checkable questions and no answers", async () => {
   const [logicSource, appSource] = await Promise.all([
     source("game-logic.js"),
     source("app.js"),
   ]);
 
-  function renderSavedPhase(phase) {
+  function renderSavedPhase(phase, checkedQuestions = []) {
     const appElement = { innerHTML: "", addEventListener() {} };
     const savedState = JSON.stringify({
-      version: 3,
+      version: 4,
       groupSize: 3,
       role: "combined-controller",
       phase,
       uniformAttempts: [],
       groupAttempts: [],
-      completed: false,
+      checkedQuestions,
     });
     const context = createContext({
       document: {
@@ -224,13 +225,15 @@ test("saved discussion and answer-key states render their intended content", asy
   }
 
   const discussion = renderSavedPhase("discussion");
-  assert.match(discussion, /Four questions\. No hints\./);
-  assert.match(discussion, /We discussed them — reveal answers/);
+  assert.match(discussion, /Three questions\. No hints\./);
+  assert.match(discussion, /data-question="3"/);
+  assert.doesNotMatch(discussion, /data-question="4"/);
+  assert.doesNotMatch(discussion, /We discussed them/);
   assert.doesNotMatch(discussion, /Total surplus<\/td>/);
 
-  const answers = renderSavedPhase("answers");
-  assert.match(answers, /The lesson changes when one value changes\./);
-  assert.match(answers, /Student pricing still raises profit by \$5, but total surplus falls by \$1/);
+  const withChecks = renderSavedPhase("discussion", [2]);
+  assert.match(withChecks, /data-question="2"[^>]* checked/);
+  assert.doesNotMatch(withChecks, /data-question="1"[^>]* checked/);
 });
 
 test("the student page has no persistent title bar", async () => {
