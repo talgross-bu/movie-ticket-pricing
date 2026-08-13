@@ -424,7 +424,7 @@ function renderReveal() {
     <section class="reveal-hero">
       <span class="eyebrow">The box office revealed</span>
       <h1>Compare the box-office results before judging them.</h1>
-      <p class="lede">Prices, ticket sales, and profit appear now. Consumer surplus and total surplus are for your group to work out in the discussion.</p>
+      <p class="lede">Prices, ticket sales, and profit appear now. What to make of them is for your group to work out in the discussion.</p>
     </section>
 
     <section class="room-result" aria-labelledby="room-result-heading">
@@ -480,7 +480,7 @@ function renderReveal() {
 const DISCUSSION_QUESTIONS = [
   "Why did the theater earn more by charging $8 and leaving three seats empty than by charging $4 and filling every seat?",
   "What would happen to the two-price strategy if the theater stopped checking student IDs or allowed tickets to be resold?",
-  "Now suppose the third movie fan would pay only $4 rather than $8—the same as the least eager student. Work out the best one-price policy and the best student-pricing policy. Which one sells more tickets? Does student pricing still increase profit? Does it still increase total surplus?",
+  "Now suppose the third movie fan would pay only $4 rather than $8—the same as the least eager student. Work out the best one-price policy and the best student-pricing policy. Which one sells more tickets? Does student pricing still increase profit?",
 ];
 
 function discussionQuestionList() {

@@ -132,7 +132,8 @@ test("the discussion poses three questions and the site holds no answer key", as
   assert.match(appSource, /stopped checking student IDs or allowed tickets to be resold/);
   assert.match(appSource, /third movie fan would pay only \$4 rather than \$8/);
   assert.match(appSource, /Each attendee costs the theater \$1\./);
-  assert.doesNotMatch(appSource, /whose surplus changed/);
+  // Surplus is worked out aloud in the debrief, so the word never reaches the page.
+  assert.doesNotMatch(appSource, /surplus/i);
   assert.doesNotMatch(appSource, /reveal answers/i);
   assert.doesNotMatch(appSource, /renderAnswerKey|phase: "answers"|Answer key|Bottom line/);
   assert.doesNotMatch(appSource, /Think about student ID checks/);
@@ -229,7 +230,7 @@ test("the saved discussion state renders three checkable questions and no answer
   assert.match(discussion, /data-question="3"/);
   assert.doesNotMatch(discussion, /data-question="4"/);
   assert.doesNotMatch(discussion, /We discussed them/);
-  assert.doesNotMatch(discussion, /Total surplus<\/td>/);
+  assert.doesNotMatch(discussion, /surplus/i);
 
   const withChecks = renderSavedPhase("discussion", [2]);
   assert.match(withChecks, /data-question="2"[^>]* checked/);
