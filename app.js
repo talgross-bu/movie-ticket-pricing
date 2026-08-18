@@ -312,6 +312,7 @@ function renderUniformPhase() {
                   ? "Ask the theater manager for one ticket price. Announce it to both groups, then record sales."
                   : "Choose one ticket price. Announce it to both groups, then record sales."
               }</p>
+              <div class="notice price-range-notice"><strong>Allowed prices:</strong> Every ticket price must be a whole-dollar amount from $1 through $10.</div>
               <form id="uniform-form" novalidate>
                 <div class="field-grid field-grid--three">
                   <label class="field">
@@ -366,6 +367,7 @@ function renderGroupPhase() {
                   ? "Ask the theater manager for both ticket prices. Tell each group only its price."
                   : "Choose both ticket prices. Tell each group only its price."
               }</p>
+              <div class="notice price-range-notice"><strong>Allowed prices:</strong> Every ticket price must be a whole-dollar amount from $1 through $10.</div>
               <form id="group-form" novalidate>
                 <div class="market-form-grid">
                   <fieldset>
@@ -478,25 +480,45 @@ function renderReveal() {
 }
 
 const DISCUSSION_QUESTIONS = [
-  "Why did the theater earn more by charging $8 and leaving three seats empty than by charging $4 and filling every seat?",
+  "If the movie theater can only charge a single price, it is most profitable to charge $8 and leave three seats empty. How can it be profitable to leave empty seats?",
   "What would happen to the two-price strategy if the theater stopped checking student IDs or allowed tickets to be resold?",
   "Now suppose the third movie fan would pay only $4 rather than $8—the same as the least eager student. Work out the best one-price policy and the best student-pricing policy. Which one sells more tickets? Does student pricing still increase profit?",
 ];
+
+const QUESTION_THREE_VALUES = Object.freeze({
+  high: Object.freeze([10, 9, 4]),
+  low: MARKETS.low.values,
+});
+
+function questionThreeValues() {
+  return `
+    <div class="question-values" role="group" aria-label="Willingness to pay comparison for Question 3">
+      <section class="values-reveal values-reveal--compact">
+        <div><span class="eyebrow">Original values</span><h3>Original willingness to pay</h3></div>
+        <div class="value-chips"><strong>Movie fans</strong>${MARKETS.high.values.map((value) => `<span>${money(value)}</span>`).join("")}</div>
+        <div class="value-chips"><strong>Students</strong>${MARKETS.low.values.map((value) => `<span>${money(value)}</span>`).join("")}</div>
+      </section>
+      <section class="values-reveal values-reveal--compact values-reveal--new">
+        <div><span class="eyebrow">New values</span><h3>New willingness to pay for Question 3</h3></div>
+        <div class="value-chips"><strong>Movie fans</strong>${QUESTION_THREE_VALUES.high.map((value) => `<span>${money(value)}</span>`).join("")}</div>
+        <div class="value-chips"><strong>Students</strong>${QUESTION_THREE_VALUES.low.map((value) => `<span>${money(value)}</span>`).join("")}</div>
+      </section>
+    </div>
+  `;
+}
 
 function discussionQuestionList() {
   return `
     <ol class="question-list">
       ${DISCUSSION_QUESTIONS.map((question, index) => {
         const number = index + 1;
-        const isChecked = state.checkedQuestions.includes(number);
         return `
-          <li class="${isChecked ? "is-checked" : ""}">
+          <li>
             <span>0${number}</span>
-            <div><h2>${question}</h2></div>
-            <label class="question-check">
-              <input type="checkbox" data-question="${number}" aria-label="Mark question ${number} as discussed"${isChecked ? " checked" : ""}>
-              <span aria-hidden="true">✓</span>
-            </label>
+            <div>
+              <h2>${question}</h2>
+              ${number === 3 ? questionThreeValues() : ""}
+            </div>
           </li>
         `;
       }).join("")}
@@ -511,11 +533,6 @@ function baselineFacts() {
       <article><span>Student pricing</span><strong>$8 general · $4 student</strong><p>6 tickets sold · $30 theater profit</p></article>
       <p class="formula-note">Each attendee costs the theater $1.</p>
     </section>
-    <section class="values-reveal values-reveal--compact">
-      <div><span class="eyebrow">Willingness to pay</span><h2>Use these values in Question 3</h2></div>
-      <div class="value-chips"><strong>Movie fans</strong>${MARKETS.high.values.map((value) => `<span>${money(value)}</span>`).join("")}</div>
-      <div class="value-chips"><strong>Students</strong>${MARKETS.low.values.map((value) => `<span>${money(value)}</span>`).join("")}</div>
-    </section>
   `;
 }
 
@@ -524,8 +541,8 @@ function renderDiscussion() {
     ${spokespersonProgress("discussion")}
     <section class="discussion-hero">
       <span class="eyebrow">Work these out together</span>
-      <h1>Three questions. No hints.</h1>
-      <p class="lede">The spokesperson reads each question aloud. Work from the observed results and show your calculations.</p>
+      <h1>Three questions.</h1>
+      <p class="lede">The spokesperson reads each question aloud. Talk these through and then we will debrief all together.</p>
     </section>
 
     ${baselineFacts()}
@@ -650,8 +667,8 @@ function renderParticipantReveal() {
   app.innerHTML = pageShell(`
     <section class="discussion-hero">
       <span class="eyebrow">Work these out together</span>
-      <h1>Three questions. No hints.</h1>
-      <p class="lede">Help your spokesperson work from the results and show the calculations.</p>
+      <h1>Three questions.</h1>
+      <p class="lede">Talk these through and then we will debrief all together.</p>
     </section>
 
     ${baselineFacts()}
@@ -796,25 +813,6 @@ function handleClick(event) {
   }
 }
 
-function handleQuestionCheck(event) {
-  const box = event.target.closest("[data-question]");
-  if (!box) {
-    return;
-  }
-
-  // The checkbox already shows the new state, so saving it is all that is left.
-  const checked = new Set(state.checkedQuestions);
-  const question = Number(box.dataset.question);
-  if (box.checked) {
-    checked.add(question);
-  } else {
-    checked.delete(question);
-  }
-  state.checkedQuestions = [...checked].sort();
-  persistState();
-  box.closest("li").classList.toggle("is-checked", box.checked);
-}
-
 function handleSubmit(event) {
   event.preventDefault();
   if (event.target.id === "uniform-form") {
@@ -855,6 +853,5 @@ function render() {
 }
 
 app.addEventListener("click", handleClick);
-app.addEventListener("change", handleQuestionCheck);
 app.addEventListener("submit", handleSubmit);
 render();

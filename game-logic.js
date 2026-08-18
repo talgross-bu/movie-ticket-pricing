@@ -11,7 +11,6 @@ const MARGINAL_COST = 1;
 const MIN_PRICE = 1;
 const MAX_PRICE = 10;
 const ATTEMPTS_PER_TREATMENT = 3;
-const DISCUSSION_QUESTION_COUNT = 3;
 
 const MARKETS = Object.freeze({
   high: Object.freeze({
@@ -223,7 +222,6 @@ function makeInitialState() {
     phase: "landing",
     uniformAttempts: [],
     groupAttempts: [],
-    checkedQuestions: [],
   };
 }
 
@@ -280,12 +278,6 @@ function normalizeStoredState(candidate) {
   const groupAttempts = Array.isArray(candidate.groupAttempts)
     ? candidate.groupAttempts.filter(validGroupAttempt).slice(0, ATTEMPTS_PER_TREATMENT)
     : [];
-  const checkedQuestions = Array.isArray(candidate.checkedQuestions)
-    ? [...new Set(candidate.checkedQuestions)].filter(
-        (question) => Number.isInteger(question) && question >= 1 && question <= DISCUSSION_QUESTION_COUNT,
-      )
-    : [];
-
   return {
     version: STATE_VERSION,
     groupSize: candidate.groupSize,
@@ -293,7 +285,6 @@ function normalizeStoredState(candidate) {
     phase,
     uniformAttempts,
     groupAttempts,
-    checkedQuestions,
   };
 }
 
@@ -303,7 +294,6 @@ globalThis.TwoMarketsGameLogic = Object.freeze({
   MIN_PRICE,
   MAX_PRICE,
   ATTEMPTS_PER_TREATMENT,
-  DISCUSSION_QUESTION_COUNT,
   MARKETS,
   ROLE_OPTIONS,
   isAllowedPrice,

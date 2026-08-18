@@ -168,7 +168,7 @@ test("the retired answer-key phase falls back to the landing screen", () => {
   assert.equal(normalized.phase, "landing");
 });
 
-test("checked discussion questions survive refresh and drop invalid entries", () => {
+test("obsolete checked-question data is ignored", () => {
   const normalized = normalizeStoredState({
     ...makeInitialState(),
     groupSize: 3,
@@ -177,8 +177,7 @@ test("checked discussion questions survive refresh and drop invalid entries", ()
     checkedQuestions: [1, 3, 1, "2", 9, 0],
   });
 
-  assert.deepEqual(normalized.checkedQuestions, [1, 3]);
-  assert.deepEqual(normalizeStoredState(makeInitialState()).checkedQuestions, []);
+  assert.equal(Object.hasOwn(normalized, "checkedQuestions"), false);
 });
 
 test("incompatible stored state resets safely", () => {

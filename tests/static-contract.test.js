@@ -77,7 +77,6 @@ test("the spokesperson assigns the other roles in every room size", async () => 
       phase,
       uniformAttempts: [],
       groupAttempts: [],
-      checkedQuestions: [],
     });
     const context = createContext({
       document: {
@@ -128,7 +127,7 @@ test("the spokesperson assigns the other roles in every room size", async () => 
 
 test("the discussion poses three questions and the site holds no answer key", async () => {
   const appSource = await source("app.js");
-  assert.match(appSource, /Why did the theater earn more by charging \$8 and leaving three seats empty/);
+  assert.match(appSource, /If the movie theater can only charge a single price, it is most profitable to charge \$8 and leave three seats empty/);
   assert.match(appSource, /stopped checking student IDs or allowed tickets to be resold/);
   assert.match(appSource, /third movie fan would pay only \$4 rather than \$8/);
   assert.match(appSource, /Each attendee costs the theater \$1\./);
@@ -186,22 +185,21 @@ test("classic scripts execute in order and render the landing screen", async () 
   assert.match(appElement.innerHTML, /How many people are in your breakout room\?/);
 });
 
-test("the saved discussion state renders three checkable questions and no answers", async () => {
+test("the saved discussion state renders the revised questions and value comparison", async () => {
   const [logicSource, appSource] = await Promise.all([
     source("game-logic.js"),
     source("app.js"),
   ]);
 
-  function renderSavedPhase(phase, checkedQuestions = []) {
+  function renderSavedPhase(phase, role = "combined-controller") {
     const appElement = { innerHTML: "", addEventListener() {} };
     const savedState = JSON.stringify({
       version: 4,
       groupSize: 3,
-      role: "combined-controller",
+      role,
       phase,
       uniformAttempts: [],
       groupAttempts: [],
-      checkedQuestions,
     });
     const context = createContext({
       document: {
@@ -226,15 +224,39 @@ test("the saved discussion state renders three checkable questions and no answer
   }
 
   const discussion = renderSavedPhase("discussion");
-  assert.match(discussion, /Three questions\. No hints\./);
-  assert.match(discussion, /data-question="3"/);
-  assert.doesNotMatch(discussion, /data-question="4"/);
-  assert.doesNotMatch(discussion, /We discussed them/);
+  assert.match(discussion, /Three questions\./);
+  assert.doesNotMatch(discussion, /No hints/);
+  assert.match(discussion, /Talk these through and then we will debrief all together\./);
+  assert.match(discussion, /If the movie theater can only charge a single price, it is most profitable to charge \$8 and leave three seats empty\. How can it be profitable to leave empty seats\?/);
+  assert.match(discussion, /stopped checking student IDs or allowed tickets to be resold/);
+  assert.match(discussion, /third movie fan would pay only \$4 rather than \$8/);
+  const originalValues = discussion.indexOf("Original willingness to pay");
+  const newValues = discussion.indexOf("New willingness to pay for Question 3");
+  assert.ok(originalValues > discussion.indexOf("03"));
+  assert.ok(newValues > originalValues);
+  assert.match(discussion.slice(originalValues, newValues), /\$10[\s\S]*\$9[\s\S]*\$8[\s\S]*\$6[\s\S]*\$5[\s\S]*\$4/);
+  assert.match(discussion.slice(newValues), /\$10[\s\S]*\$9[\s\S]*\$4[\s\S]*\$6[\s\S]*\$5[\s\S]*\$4/);
+  assert.doesNotMatch(discussion, /type="checkbox"|data-question|question-check/);
   assert.doesNotMatch(discussion, /surplus/i);
 
-  const withChecks = renderSavedPhase("discussion", [2]);
-  assert.match(withChecks, /data-question="2"[^>]* checked/);
-  assert.doesNotMatch(withChecks, /data-question="1"[^>]* checked/);
+  const participantDiscussion = renderSavedPhase("discussion", "high-market");
+  assert.match(participantDiscussion, /Three questions\./);
+  assert.match(participantDiscussion, /Talk these through and then we will debrief all together\./);
+  assert.doesNotMatch(participantDiscussion, /No hints|type="checkbox"/);
+});
+
+test("spokesperson pricing forms state the allowed whole-dollar range", async () => {
+  const appSource = await source("app.js");
+  assert.equal(
+    [...appSource.matchAll(/Allowed prices:<\/strong> Every ticket price must be a whole-dollar amount from \$1 through \$10\./g)].length,
+    2,
+  );
+  for (const id of ["uniform-price", "group-high-price", "group-low-price"]) {
+    assert.match(
+      appSource,
+      new RegExp(`id="${id}"[^>]*min="1"[^>]*max="10"[^>]*step="1"`),
+    );
+  }
 });
 
 test("the student page has no persistent title bar", async () => {
