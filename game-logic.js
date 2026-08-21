@@ -6,196 +6,161 @@
 (function initializeGameLogic() {
 "use strict";
 
-const STATE_VERSION = 4;
+const STATE_VERSION = 5;
 const MARGINAL_COST = 1;
+const CAPACITY = 60;
 const MIN_PRICE = 1;
 const MAX_PRICE = 10;
-const ATTEMPTS_PER_TREATMENT = 3;
+const ATTEMPTS_PER_ROUND = 3;
 
 const MARKETS = Object.freeze({
-  high: Object.freeze({
-    label: "Local movie fans",
-    shortLabel: "Movie fans",
-    values: Object.freeze([10, 9, 8]),
+  locals: Object.freeze({
+    label: "Locals",
+    values: Object.freeze([
+      ...Array(10).fill(10),
+      ...Array(10).fill(9),
+      ...Array(10).fill(8),
+    ]),
   }),
-  low: Object.freeze({
-    label: "Verified students",
-    shortLabel: "Students",
-    values: Object.freeze([6, 5, 4]),
+  students: Object.freeze({
+    label: "College students",
+    values: Object.freeze([
+      ...Array(10).fill(6),
+      ...Array(10).fill(5),
+      ...Array(10).fill(4),
+    ]),
   }),
 });
 
-const ROLE_OPTIONS = Object.freeze({
-  3: Object.freeze([
-    Object.freeze({
-      id: "combined-controller",
-      title: "Spokesperson",
-      subtitle: "Choose ticket prices, record sales, and speak for the room",
-      isSpokesperson: true,
-    }),
-    Object.freeze({
-      id: "high-market",
-      title: "Local movie fans",
-      subtitle: "Privately represent three general-admission customers",
-      isSpokesperson: false,
-    }),
-    Object.freeze({
-      id: "low-market",
-      title: "Verified students",
-      subtitle: "Privately represent three student customers",
-      isSpokesperson: false,
-    }),
-  ]),
-  4: Object.freeze([
-    Object.freeze({
-      id: "analyst-controller",
-      title: "Spokesperson",
-      subtitle: "Record ticket sales, run the activity, and speak for the room",
-      isSpokesperson: true,
-    }),
-    Object.freeze({
-      id: "theater-manager",
-      title: "Theater manager",
-      subtitle: "Choose the ticket prices",
-      isSpokesperson: false,
-    }),
-    Object.freeze({
-      id: "high-market",
-      title: "Local movie fans",
-      subtitle: "Privately represent three general-admission customers",
-      isSpokesperson: false,
-    }),
-    Object.freeze({
-      id: "low-market",
-      title: "Verified students",
-      subtitle: "Privately represent three student customers",
-      isSpokesperson: false,
-    }),
-  ]),
+const ROUNDS = Object.freeze({
+  august: Object.freeze({
+    label: "August",
+    pricing: "uniform",
+    activeMarkets: Object.freeze(["locals"]),
+  }),
+  september: Object.freeze({
+    label: "September",
+    pricing: "uniform",
+    activeMarkets: Object.freeze(["locals", "students"]),
+  }),
+  october: Object.freeze({
+    label: "October",
+    pricing: "segmented",
+    activeMarkets: Object.freeze(["locals", "students"]),
+  }),
 });
+
+const DIRECTIONS = Object.freeze(["increase", "decrease", "same"]);
+const ALLOWED_PHASES = Object.freeze([
+  "share",
+  "setup-august",
+  "play-august",
+  "review-august",
+  "predict-september",
+  "play-september",
+  "review-september",
+  "predict-october",
+  "play-october",
+  "review-october",
+  "recap",
+  "summary",
+]);
 
 function isAllowedPrice(price) {
   return Number.isInteger(price) && price >= MIN_PRICE && price <= MAX_PRICE;
 }
 
 function demandAtPrice(marketId, price) {
-  if (!Object.hasOwn(MARKETS, marketId)) {
+  const market = MARKETS[marketId];
+  if (!market) {
     throw new RangeError(`Unknown market: ${marketId}`);
   }
   if (!isAllowedPrice(price)) {
     throw new RangeError(`Price must be a whole dollar from ${MIN_PRICE} through ${MAX_PRICE}.`);
   }
-
-  return MARKETS[marketId].values.filter((value) => value >= price).length;
+  return market.values.filter((value) => value >= price).length;
 }
 
-function profitForUniformPrice(price, highQuantity, lowQuantity) {
-  return (price - MARGINAL_COST) * (highQuantity + lowQuantity);
-}
-
-function profitForGroupPrices(highPrice, highQuantity, lowPrice, lowQuantity) {
-  return (
-    (highPrice - MARGINAL_COST) * highQuantity +
-    (lowPrice - MARGINAL_COST) * lowQuantity
-  );
-}
-
-function validateUniformReport({ price, highQuantity, lowQuantity }) {
-  if (!isAllowedPrice(price)) {
-    return { valid: false, reason: "price" };
-  }
-  const quantitiesAreIntegers = [highQuantity, lowQuantity].every(
-    (quantity) => Number.isInteger(quantity) && quantity >= 0 && quantity <= 3,
-  );
-  if (!quantitiesAreIntegers) {
-    return { valid: false, reason: "quantity" };
-  }
-
-  const reportsMatch =
-    highQuantity === demandAtPrice("high", price) &&
-    lowQuantity === demandAtPrice("low", price);
-  return { valid: reportsMatch, reason: reportsMatch ? null : "mismatch" };
-}
-
-function validateGroupReport({ highPrice, highQuantity, lowPrice, lowQuantity }) {
-  if (!isAllowedPrice(highPrice) || !isAllowedPrice(lowPrice)) {
-    return { valid: false, reason: "price" };
-  }
-  const quantitiesAreIntegers = [highQuantity, lowQuantity].every(
-    (quantity) => Number.isInteger(quantity) && quantity >= 0 && quantity <= 3,
-  );
-  if (!quantitiesAreIntegers) {
-    return { valid: false, reason: "quantity" };
-  }
-
-  const reportsMatch =
-    highQuantity === demandAtPrice("high", highPrice) &&
-    lowQuantity === demandAtPrice("low", lowPrice);
-  return { valid: reportsMatch, reason: reportsMatch ? null : "mismatch" };
-}
-
-function makeUniformAttempt(price, highQuantity, lowQuantity) {
+function finishOutcome({ localPrice, studentPrice, localQuantity, studentQuantity }) {
+  const totalQuantity = localQuantity + studentQuantity;
+  const revenue = localPrice * localQuantity + studentPrice * studentQuantity;
+  const cost = MARGINAL_COST * totalQuantity;
   return {
-    price,
-    highQuantity,
-    lowQuantity,
-    totalQuantity: highQuantity + lowQuantity,
-    profit: profitForUniformPrice(price, highQuantity, lowQuantity),
-  };
-}
-
-function makeGroupAttempt(highPrice, highQuantity, lowPrice, lowQuantity) {
-  return {
-    highPrice,
-    highQuantity,
-    lowPrice,
-    lowQuantity,
-    totalQuantity: highQuantity + lowQuantity,
-    profit: profitForGroupPrices(highPrice, highQuantity, lowPrice, lowQuantity),
-  };
-}
-
-function outcomeForQuantities(highQuantity, lowQuantity, highPrice, lowPrice = highPrice) {
-  const servedHighValues = MARKETS.high.values.slice(0, highQuantity);
-  const servedLowValues = MARKETS.low.values.slice(0, lowQuantity);
-  const totalQuantity = highQuantity + lowQuantity;
-  const totalValue = [...servedHighValues, ...servedLowValues].reduce(
-    (sum, value) => sum + value,
-    0,
-  );
-  const consumerSurplus =
-    servedHighValues.reduce((sum, value) => sum + value - highPrice, 0) +
-    servedLowValues.reduce((sum, value) => sum + value - lowPrice, 0);
-  const profit = profitForGroupPrices(
-    highPrice,
-    highQuantity,
-    lowPrice,
-    lowQuantity,
-  );
-
-  return {
+    localQuantity,
+    studentQuantity,
     totalQuantity,
-    profit,
-    consumerSurplus,
-    totalSurplus: totalValue - MARGINAL_COST * totalQuantity,
+    seatsEmpty: CAPACITY - totalQuantity,
+    revenue,
+    cost,
+    profit: revenue - cost,
   };
 }
 
-const BENCHMARKS = Object.freeze({
-  uniform: Object.freeze({
-    price: 8,
-    highQuantity: 3,
-    lowQuantity: 0,
-    ...outcomeForQuantities(3, 0, 8),
-  }),
-  group: Object.freeze({
-    highPrice: 8,
-    lowPrice: 4,
-    highQuantity: 3,
-    lowQuantity: 3,
-    ...outcomeForQuantities(3, 3, 8, 4),
-  }),
-});
+function uniformOutcome(roundId, price) {
+  const round = ROUNDS[roundId];
+  if (!round || round.pricing !== "uniform") {
+    throw new RangeError(`Uniform pricing is unavailable for round: ${roundId}`);
+  }
+  if (!isAllowedPrice(price)) {
+    throw new RangeError(`Price must be a whole dollar from ${MIN_PRICE} through ${MAX_PRICE}.`);
+  }
+
+  const localQuantity = demandAtPrice("locals", price);
+  const studentQuantity = round.activeMarkets.includes("students")
+    ? demandAtPrice("students", price)
+    : 0;
+  return {
+    roundId,
+    price,
+    ...finishOutcome({
+      localPrice: price,
+      studentPrice: price,
+      localQuantity,
+      studentQuantity,
+    }),
+  };
+}
+
+function segmentedOutcome(localPrice, studentPrice) {
+  if (!isAllowedPrice(localPrice) || !isAllowedPrice(studentPrice)) {
+    throw new RangeError(
+      `Both prices must be whole dollars from ${MIN_PRICE} through ${MAX_PRICE}.`,
+    );
+  }
+  return {
+    roundId: "october",
+    localPrice,
+    studentPrice,
+    ...finishOutcome({
+      localPrice,
+      studentPrice,
+      localQuantity: demandAtPrice("locals", localPrice),
+      studentQuantity: demandAtPrice("students", studentPrice),
+    }),
+  };
+}
+
+function uniformProfitSchedule(roundId) {
+  return Array.from({ length: MAX_PRICE - MIN_PRICE + 1 }, (_, index) =>
+    uniformOutcome(roundId, MIN_PRICE + index),
+  );
+}
+
+function marketProfitSchedule(marketId) {
+  if (!MARKETS[marketId]) {
+    throw new RangeError(`Unknown market: ${marketId}`);
+  }
+  return Array.from({ length: MAX_PRICE - MIN_PRICE + 1 }, (_, index) => {
+    const price = MIN_PRICE + index;
+    const quantity = demandAtPrice(marketId, price);
+    return {
+      marketId,
+      price,
+      quantity,
+      profit: (price - MARGINAL_COST) * quantity,
+    };
+  });
+}
 
 function bestAttempt(attempts) {
   if (!Array.isArray(attempts) || attempts.length === 0) {
@@ -206,46 +171,77 @@ function bestAttempt(attempts) {
   );
 }
 
-function rolesForGroup(groupSize) {
-  return ROLE_OPTIONS[groupSize] ?? [];
+function bestFromSchedule(outcomes) {
+  return bestAttempt(outcomes);
 }
 
-function roleForState(groupSize, roleId) {
-  return rolesForGroup(groupSize).find((role) => role.id === roleId) ?? null;
-}
+const BENCHMARKS = Object.freeze({
+  august: Object.freeze(bestFromSchedule(uniformProfitSchedule("august"))),
+  september: Object.freeze(bestFromSchedule(uniformProfitSchedule("september"))),
+  october: Object.freeze(segmentedOutcome(8, 4)),
+});
 
 function makeInitialState() {
   return {
     version: STATE_VERSION,
-    groupSize: null,
-    role: null,
-    phase: "landing",
-    uniformAttempts: [],
-    groupAttempts: [],
+    phase: "share",
+    shareAcknowledged: false,
+    attempts: {
+      august: [],
+      september: [],
+      october: [],
+    },
+    predictions: {
+      september: { profit: null, quantity: null },
+      october: { profit: null, quantity: null },
+    },
   };
 }
 
-function validUniformAttempt(attempt) {
-  return (
-    attempt &&
-    validateUniformReport(attempt).valid &&
-    attempt.profit ===
-      profitForUniformPrice(attempt.price, attempt.highQuantity, attempt.lowQuantity)
-  );
+function sameNumbers(candidate, expected, keys) {
+  return keys.every((key) => candidate[key] === expected[key]);
 }
 
-function validGroupAttempt(attempt) {
-  return (
-    attempt &&
-    validateGroupReport(attempt).valid &&
-    attempt.profit ===
-      profitForGroupPrices(
-        attempt.highPrice,
-        attempt.highQuantity,
-        attempt.lowPrice,
-        attempt.lowQuantity,
-      )
-  );
+function validAttempt(roundId, candidate) {
+  if (!candidate || candidate.roundId !== roundId) {
+    return false;
+  }
+  try {
+    if (roundId === "october") {
+      const expected = segmentedOutcome(candidate.localPrice, candidate.studentPrice);
+      return sameNumbers(candidate, expected, [
+        "localPrice",
+        "studentPrice",
+        "localQuantity",
+        "studentQuantity",
+        "totalQuantity",
+        "seatsEmpty",
+        "revenue",
+        "cost",
+        "profit",
+      ]);
+    }
+    const expected = uniformOutcome(roundId, candidate.price);
+    return sameNumbers(candidate, expected, [
+      "price",
+      "localQuantity",
+      "studentQuantity",
+      "totalQuantity",
+      "seatsEmpty",
+      "revenue",
+      "cost",
+      "profit",
+    ]);
+  } catch {
+    return false;
+  }
+}
+
+function normalizePrediction(candidate) {
+  return {
+    profit: DIRECTIONS.includes(candidate?.profit) ? candidate.profit : null,
+    quantity: DIRECTIONS.includes(candidate?.quantity) ? candidate.quantity : null,
+  };
 }
 
 function normalizeStoredState(candidate) {
@@ -253,62 +249,47 @@ function normalizeStoredState(candidate) {
   if (!candidate || candidate.version !== STATE_VERSION) {
     return initial;
   }
-  if (![null, 3, 4].includes(candidate.groupSize)) {
-    return initial;
+
+  const phase = ALLOWED_PHASES.includes(candidate.phase) ? candidate.phase : "share";
+  const attempts = {};
+  for (const roundId of Object.keys(ROUNDS)) {
+    const storedAttempts = candidate.attempts?.[roundId];
+    attempts[roundId] = Array.isArray(storedAttempts)
+      ? storedAttempts.filter((attempt) => validAttempt(roundId, attempt)).slice(0, ATTEMPTS_PER_ROUND)
+      : [];
   }
-  const role = candidate.role === null
-    ? null
-    : roleForState(candidate.groupSize, candidate.role);
-  if (candidate.role !== null && !role) {
-    return initial;
-  }
-  const allowedPhases = [
-    "landing",
-    "roles",
-    "setup",
-    "uniform",
-    "group",
-    "reveal",
-    "discussion",
-  ];
-  const phase = allowedPhases.includes(candidate.phase) ? candidate.phase : "landing";
-  const uniformAttempts = Array.isArray(candidate.uniformAttempts)
-    ? candidate.uniformAttempts.filter(validUniformAttempt).slice(0, ATTEMPTS_PER_TREATMENT)
-    : [];
-  const groupAttempts = Array.isArray(candidate.groupAttempts)
-    ? candidate.groupAttempts.filter(validGroupAttempt).slice(0, ATTEMPTS_PER_TREATMENT)
-    : [];
+
   return {
     version: STATE_VERSION,
-    groupSize: candidate.groupSize,
-    role: role?.id ?? null,
     phase,
-    uniformAttempts,
-    groupAttempts,
+    shareAcknowledged: candidate.shareAcknowledged === true,
+    attempts,
+    predictions: {
+      september: normalizePrediction(candidate.predictions?.september),
+      october: normalizePrediction(candidate.predictions?.october),
+    },
   };
 }
 
-globalThis.TwoMarketsGameLogic = Object.freeze({
+globalThis.MovieTicketGameLogic = Object.freeze({
   STATE_VERSION,
   MARGINAL_COST,
+  CAPACITY,
   MIN_PRICE,
   MAX_PRICE,
-  ATTEMPTS_PER_TREATMENT,
+  ATTEMPTS_PER_ROUND,
   MARKETS,
-  ROLE_OPTIONS,
+  ROUNDS,
+  DIRECTIONS,
+  ALLOWED_PHASES,
+  BENCHMARKS,
   isAllowedPrice,
   demandAtPrice,
-  profitForUniformPrice,
-  profitForGroupPrices,
-  validateUniformReport,
-  validateGroupReport,
-  makeUniformAttempt,
-  makeGroupAttempt,
-  outcomeForQuantities,
-  BENCHMARKS,
+  uniformOutcome,
+  segmentedOutcome,
+  uniformProfitSchedule,
+  marketProfitSchedule,
   bestAttempt,
-  rolesForGroup,
-  roleForState,
   makeInitialState,
   normalizeStoredState,
 });

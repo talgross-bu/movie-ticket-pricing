@@ -1,10 +1,10 @@
 # The Movie Ticket Pricing Challenge
 
-A dependency-free static website for a short Zoom breakout exercise about general-admission movie tickets and verified student pricing. It supports groups of either three or four and keeps every student's role active.
+A dependency-free static website for a short Zoom breakout exercise about general-admission movie tickets and verified student pricing. One spokesperson shares the site with a group of three or four and records the room's decisions.
 
 ## Learning goals
 
-The exercise asks students to compare uniform and group-based ticket pricing through profit, capacity, consumer surplus, and total surplus. It also prompts them to consider the practical roles of customer verification and resale. The activity leaves the direction and size of these effects for students to derive.
+The exercise follows a 60-seat theater from August through October. Groups experiment with uniform pricing before gaining the ability to set a verified student price. They compare profit and quantity, then use the final market reveal to discuss empty seats, excluded low-value customers, price discrimination, and arbitrage.
 
 ## Student URL
 
@@ -46,4 +46,4 @@ Licensed under [CC BY 4.0](LICENSE). You are welcome to reuse and adapt the exer
 
 ## Data and recovery
 
-The application makes no network requests after its static files load. It stores only the current device's group size, role, spokesperson attempts, phase, and which discussion questions are checked off in `localStorage`. No result is submitted or copied. If local storage is unavailable, the game continues with an on-screen warning but cannot recover after refresh.
+The application makes no network requests after its static files load. It stores only the current phase, room attempts, and prediction choices in `localStorage`. No result is submitted or copied. If local storage is unavailable, the game continues with an on-screen warning but cannot recover after refresh.

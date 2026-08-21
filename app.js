@@ -1,27 +1,30 @@
 /**
- * Renders the role-specific student experience and manages one device's local session.
- * All coordination happens aloud in Zoom; this script never sends data over the network.
+ * Single-screen classroom experience for the movie-ticket pricing exercise.
+ * All calculations and saved progress stay in this browser.
  */
 
 const {
-  ATTEMPTS_PER_TREATMENT,
-  BENCHMARKS,
+  STATE_VERSION,
+  MARGINAL_COST,
+  CAPACITY,
+  MIN_PRICE,
+  MAX_PRICE,
+  ATTEMPTS_PER_ROUND,
   MARKETS,
+  ROUNDS,
+  BENCHMARKS,
+  DIRECTIONS,
   bestAttempt,
-  demandAtPrice,
-  makeGroupAttempt,
+  uniformOutcome,
+  segmentedOutcome,
+  uniformProfitSchedule,
+  marketProfitSchedule,
   makeInitialState,
-  makeUniformAttempt,
   normalizeStoredState,
-  roleForState,
-  rolesForGroup,
-  validateGroupReport,
-  validateUniformReport,
-} = globalThis.TwoMarketsGameLogic;
+} = globalThis.MovieTicketGameLogic;
 
-const STORAGE_KEY = "movie-ticket-pricing-challenge-state-v4";
+const STORAGE_KEY = `movie-ticket-pricing-challenge-state-v${STATE_VERSION}`;
 const app = document.querySelector("#app");
-
 let storageAvailable = true;
 let state = loadState();
 
@@ -43,21 +46,25 @@ function persistState() {
   }
 }
 
-function setState(changes) {
+function updateState(changes) {
   state = normalizeStoredState({ ...state, ...changes });
   persistState();
   render();
 }
 
-function resetActivity() {
-  const hasProgress = state.uniformAttempts.length || state.groupAttempts.length;
+function setPhase(phase) {
+  updateState({ phase });
+}
+
+function resetActivity(askFirst = true) {
+  const hasProgress = Object.values(state.attempts).some((attempts) => attempts.length > 0);
   if (
+    askFirst &&
     hasProgress &&
-    !window.confirm("Start over on this device? Your saved role and game attempts will be erased.")
+    !window.confirm("Redo the exercise? All attempts and predictions on this device will be cleared.")
   ) {
     return;
   }
-
   state = makeInitialState();
   try {
     window.localStorage.removeItem(STORAGE_KEY);
@@ -71,6 +78,17 @@ function money(value) {
   return `$${value}`;
 }
 
+function signedMoney(value) {
+  if (value === 0) {
+    return "$0";
+  }
+  return `${value > 0 ? "+" : "−"}$${Math.abs(value)}`;
+}
+
+function plural(value, singular, pluralForm = `${singular}s`) {
+  return value === 1 ? singular : pluralForm;
+}
+
 function storageNotice() {
   if (storageAvailable) {
     return "";
@@ -78,606 +96,479 @@ function storageNotice() {
   return `
     <div class="notice notice--warning" role="status">
       <strong>Refresh recovery is unavailable.</strong>
-      You can keep playing, but leave this tab open because this browser is blocking local storage.
+      Keep this tab open because this browser is blocking local storage.
     </div>
   `;
 }
 
-function progressSteps(activeStep) {
+function progress(activeStep) {
   const steps = [
-    ["uniform", "1", "One price"],
-    ["group", "2", "Student price"],
-    ["reveal", "3", "Reveal"],
-    ["discussion", "4", "Discuss"],
+    ["august", "Aug"],
+    ["september", "Sep"],
+    ["october", "Oct"],
+    ["recap", "Recap"],
+    ["summary", "Reveal"],
   ];
   const activeIndex = steps.findIndex(([id]) => id === activeStep);
   return `
-    <ol class="progress" aria-label="Game progress">
-      ${steps
-        .map(([id, number, label], index) => {
-          const status = index < activeIndex ? "is-complete" : index === activeIndex ? "is-active" : "";
-          const current = index === activeIndex ? ' aria-current="step"' : "";
-          return `<li class="${status}"${current}><span>${number}</span>${label}</li>`;
-        })
-        .join("")}
-    </ol>
-  `;
-}
-
-function spokespersonProgress(activeStep) {
-  return progressSteps(activeStep);
-}
-
-function pageShell(content, options = {}) {
-  const { narrow = false, showReset = true } = options;
-  return `
-    <div class="page-shell ${narrow ? "page-shell--narrow" : ""}">
-      ${storageNotice()}
-      ${content}
-      ${
-        showReset
-          ? `<div class="utility-row"><button class="button button--text" type="button" data-action="reset">Start over on this device</button></div>`
-          : ""
-      }
-    </div>
-  `;
-}
-
-function renderLanding() {
-  app.innerHTML = pageShell(
-    `
-      <section class="hero hero--cinema">
-        <div class="hero__copy">
-          <span class="eyebrow">Tonight’s screening · six pricing decisions</span>
-          <h1>What should the theater charge for a movie ticket?</h1>
-          <p class="lede">
-            This exercise is about a neighborhood movie theater. First, the theater will sell
-            the same ticket to everyone. Second, the theater will try a student discount. Talk
-            through this exercise together—the website does not connect your devices.
-          </p>
-        </div>
-        <figure class="hero-product">
-          <img src="assets/movie-ticket-hero.jpg" alt="Two blank movie tickets beside popcorn in a theater.">
-          <figcaption>One Screening. Six seats. What price is best?</figcaption>
-        </figure>
-      </section>
-
-      <section class="choice-panel" aria-labelledby="group-size-heading">
-        <div class="section-heading">
-          <span class="step-kicker">First</span>
-          <div>
-            <h2 id="group-size-heading">How many people are in your breakout room?</h2>
-            <p>Everyone in the room should choose the same number.</p>
-          </div>
-        </div>
-        <div class="size-grid">
-          <button class="size-card" type="button" data-group-size="3">
-            <span class="size-card__number">3</span>
-            <span><strong>Three people</strong><small>Spokesperson + two customer groups</small></span>
-            <span class="size-card__arrow" aria-hidden="true">→</span>
-          </button>
-          <button class="size-card" type="button" data-group-size="4">
-            <span class="size-card__number">4</span>
-            <span><strong>Four people</strong><small>Spokesperson + manager + two customer groups</small></span>
-            <span class="size-card__arrow" aria-hidden="true">→</span>
-          </button>
-        </div>
-      </section>
-
-      <section class="privacy-note">
-        <span aria-hidden="true">●</span>
-        <p><strong>Nothing is submitted.</strong> Your choices stay on this device and only help recover from an accidental refresh.</p>
-      </section>
-    `,
-    { showReset: false },
-  );
-}
-
-function renderRoleSelection() {
-  const roles = rolesForGroup(state.groupSize);
-  app.innerHTML = pageShell(`
-    <button class="back-link" type="button" data-action="change-size">← Change group size</button>
-    <section class="role-intro">
-      <span class="eyebrow">Group of ${state.groupSize}</span>
-      <h1>Choose a spokesperson first</h1>
-      <p class="lede">The spokesperson assigns every other role aloud. Then each person opens the role they were assigned.</p>
-    </section>
-    <div class="role-grid role-grid--${state.groupSize}">
-      ${roles
-        .map(
-          (role, index) => `
-            <button class="role-card role-card--${index + 1}" type="button" data-role="${role.id}">
-              <span class="role-card__index">0${index + 1}</span>
-              <span class="role-card__body">
-                <strong>${role.title}</strong>
-                <small>${role.subtitle}</small>
-              </span>
-              ${role.isSpokesperson ? '<span class="role-card__badge">Choose first</span>' : ""}
-              <span class="role-card__arrow" aria-hidden="true">→</span>
-            </button>
-          `,
-        )
-        .join("")}
-    </div>
-    <div class="notice">
-      <strong>Privacy matters:</strong> only customer representatives should open customer roles.
-      The theater should not see willingness to pay until the reveal.
-    </div>
-  `);
-}
-
-function renderSpokespersonSetup(role) {
-  const isCombined = role.id === "combined-controller";
-  app.innerHTML = pageShell(
-    `
-      <section class="role-banner role-banner--spokesperson">
-        <span class="role-banner__label">Your role</span>
-        <h1>${role.title}</h1>
-        <p>${
-          isCombined
-            ? "You assign the other roles, choose every ticket price, record both groups’ sales, and speak for your room afterward."
-            : "You assign the other roles, ask the theater manager for each price, record both groups’ sales, and speak for your room afterward."
-        }</p>
-      </section>
-
-      <section class="card setup-card" aria-labelledby="ready-heading">
-        <div class="section-heading">
-          <span class="step-kicker">Before you start</span>
-          <div>
-            <h2 id="ready-heading">Get everyone ready</h2>
-            <p>Assign each remaining role aloud. Begin when every student has the assigned role open.</p>
-          </div>
-        </div>
-        <ol class="checklist">
-          ${
-            isCombined
-              ? ""
-              : "<li>Confirm that one person is the theater manager and will choose ticket prices.</li>"
-          }
-          <li>Confirm that one person represents local movie fans.</li>
-          <li>Confirm that one person represents verified students.</li>
-          <li>Tell both groups to keep willingness to pay private.</li>
-        </ol>
-        <div class="read-aloud">
-          <span>Read aloud</span>
-          “We will try three ticket prices under each pricing system. Tell me only how many people buy—not what they would pay.”
-        </div>
-        <button class="button button--primary button--wide" type="button" data-action="start-game">
-          Everyone is ready — sell tickets
-        </button>
-      </section>
-    `,
-    { narrow: true },
-  );
-}
-
-function renderAttemptTable(type, attempts) {
-  if (attempts.length === 0) {
-    return `<div class="empty-state">No attempts recorded yet.</div>`;
-  }
-
-  const header = type === "uniform"
-    ? "<tr><th>Try</th><th>Price</th><th>High Q</th><th>Low Q</th><th>Total Q</th><th>Profit</th></tr>"
-    : "<tr><th>Try</th><th>High P</th><th>Low P</th><th>High Q</th><th>Low Q</th><th>Profit</th></tr>";
-  const rows = attempts
-    .map((attempt, index) => {
-      if (type === "uniform") {
-        return `<tr><td>${index + 1}</td><td>${money(attempt.price)}</td><td>${attempt.highQuantity}</td><td>${attempt.lowQuantity}</td><td>${attempt.totalQuantity}</td><td><strong>${money(attempt.profit)}</strong></td></tr>`;
-      }
-      return `<tr><td>${index + 1}</td><td>${money(attempt.highPrice)}</td><td>${money(attempt.lowPrice)}</td><td>${attempt.highQuantity}</td><td>${attempt.lowQuantity}</td><td><strong>${money(attempt.profit)}</strong></td></tr>`;
-    })
-    .join("");
-
-  return `<div class="table-wrap"><table><thead>${header}</thead><tbody>${rows}</tbody></table></div>`;
-}
-
-function quantitySelect(id, fieldLabel) {
-  return `
-    <label class="field">
-      <span>${fieldLabel}</span>
-      <select id="${id}" required>
-        <option value="">Choose 0–3</option>
-        <option value="0">0 customers</option>
-        <option value="1">1 customer</option>
-        <option value="2">2 customers</option>
-        <option value="3">3 customers</option>
-      </select>
-    </label>
-  `;
-}
-
-function renderUniformPhase() {
-  const count = state.uniformAttempts.length;
-  const complete = count === ATTEMPTS_PER_TREATMENT;
-  app.innerHTML = pageShell(`
-    ${spokespersonProgress("uniform")}
-    <section class="phase-heading">
-      <div>
-        <span class="eyebrow">Treatment 1 of 2</span>
-        <h1>One ticket price for everyone</h1>
-        <p>The theater must offer the same general-admission price to movie fans and students.</p>
-      </div>
-      <div class="attempt-count"><strong>${count}</strong><span>of 3<br>attempts</span></div>
-    </section>
-
-    <div class="game-layout">
-      <section class="card">
-        <h2>${complete ? "All three attempts are recorded" : `Record attempt ${count + 1}`}</h2>
-        ${
-          complete
-            ? `<p>Compare the profits, then continue when the group is ready.</p>
-               <button class="button button--primary button--wide" type="button" data-action="next-group">Add a verified student price →</button>`
-            : `<p class="form-instruction">${
-                state.groupSize === 4
-                  ? "Ask the theater manager for one ticket price. Announce it to both groups, then record sales."
-                  : "Choose one ticket price. Announce it to both groups, then record sales."
-              }</p>
-              <div class="notice price-range-notice"><strong>Allowed prices:</strong> Every ticket price must be a whole-dollar amount from $1 through $10.</div>
-              <form id="uniform-form" novalidate>
-                <div class="field-grid field-grid--three">
-                  <label class="field">
-                    <span>General-admission ticket price</span>
-                    <span class="money-input"><span>$</span><input id="uniform-price" type="number" inputmode="numeric" min="1" max="10" step="1" required></span>
-                  </label>
-                  ${quantitySelect("uniform-high-quantity", "Movie-fan tickets sold")}
-                  ${quantitySelect("uniform-low-quantity", "Student tickets sold")}
-                </div>
-                <div id="form-error" class="form-error" role="alert"></div>
-                <button class="button button--primary button--wide" type="submit">Check and record attempt ${count + 1}</button>
-              </form>`
-        }
-      </section>
-
-      <section class="card results-card">
-        <div class="card-heading-row"><h2>Your results</h2>${
-          count > 0
-            ? '<button class="button button--small button--secondary" type="button" data-action="remove-uniform">Correct latest</button>'
-            : ""
-        }</div>
-        ${renderAttemptTable("uniform", state.uniformAttempts)}
-        <p class="formula-note">Ticket profit = (price − $1 per-attendee cost) × tickets sold</p>
-      </section>
-    </div>
-  `);
-}
-
-function renderGroupPhase() {
-  const count = state.groupAttempts.length;
-  const complete = count === ATTEMPTS_PER_TREATMENT;
-  app.innerHTML = pageShell(`
-    ${spokespersonProgress("group")}
-    <section class="phase-heading">
-      <div>
-        <span class="eyebrow">Treatment 2 of 2</span>
-        <h1>Add a verified student price</h1>
-        <p>Student ID is checked at the door, so the discounted ticket cannot be used by general-admission customers.</p>
-      </div>
-      <div class="attempt-count"><strong>${count}</strong><span>of 3<br>attempts</span></div>
-    </section>
-
-    <div class="game-layout">
-      <section class="card">
-        <h2>${complete ? "All three attempts are recorded" : `Record attempt ${count + 1}`}</h2>
-        ${
-          complete
-            ? `<p>Compare these profits with the one-price results, then reveal the economics.</p>
-               <button class="button button--primary button--wide" type="button" data-action="next-reveal">Reveal the market →</button>`
-            : `<p class="form-instruction">${
-                state.groupSize === 4
-                  ? "Ask the theater manager for both ticket prices. Tell each group only its price."
-                  : "Choose both ticket prices. Tell each group only its price."
-              }</p>
-              <div class="notice price-range-notice"><strong>Allowed prices:</strong> Every ticket price must be a whole-dollar amount from $1 through $10.</div>
-              <form id="group-form" novalidate>
-                <div class="market-form-grid">
-                  <fieldset>
-                    <legend>General admission</legend>
-                    <label class="field">
-                      <span>Price</span>
-                      <span class="money-input"><span>$</span><input id="group-high-price" type="number" inputmode="numeric" min="1" max="10" step="1" required></span>
-                    </label>
-                    ${quantitySelect("group-high-quantity", "Movie-fan tickets sold")}
-                  </fieldset>
-                  <fieldset>
-                    <legend>Verified students</legend>
-                    <label class="field">
-                      <span>Price</span>
-                      <span class="money-input"><span>$</span><input id="group-low-price" type="number" inputmode="numeric" min="1" max="10" step="1" required></span>
-                    </label>
-                    ${quantitySelect("group-low-quantity", "Student tickets sold")}
-                  </fieldset>
-                </div>
-                <div id="form-error" class="form-error" role="alert"></div>
-                <button class="button button--primary button--wide" type="submit">Check and record attempt ${count + 1}</button>
-              </form>`
-        }
-      </section>
-
-      <section class="card results-card">
-        <div class="card-heading-row"><h2>Your results</h2>${
-          count > 0
-            ? '<button class="button button--small button--secondary" type="button" data-action="remove-group">Correct latest</button>'
-            : ""
-        }</div>
-        ${renderAttemptTable("group", state.groupAttempts)}
-        <p class="formula-note">Profit = each ticket type’s (price − $1 per-attendee cost) × tickets sold</p>
-      </section>
-    </div>
-  `);
-}
-
-function bestUniformSummary(attempt) {
-  return attempt
-    ? `<strong>${money(attempt.profit)} profit</strong><span>${money(attempt.price)} price · ${attempt.totalQuantity} sold</span>`
-    : "<strong>Not recorded</strong>";
-}
-
-function bestGroupSummary(attempt) {
-  return attempt
-    ? `<strong>${money(attempt.profit)} profit</strong><span>${money(attempt.highPrice)} high · ${money(attempt.lowPrice)} low · ${attempt.totalQuantity} sold</span>`
-    : "<strong>Not recorded</strong>";
-}
-
-function renderReveal() {
-  const roomUniform = bestAttempt(state.uniformAttempts);
-  const roomGroup = bestAttempt(state.groupAttempts);
-  app.innerHTML = pageShell(`
-    ${spokespersonProgress("reveal")}
-    <section class="reveal-hero">
-      <span class="eyebrow">The box office revealed</span>
-      <h1>Compare the box-office results before judging them.</h1>
-      <p class="lede">Prices, ticket sales, and profit appear now. What to make of them is for your group to work out in the discussion.</p>
-    </section>
-
-    <section class="room-result" aria-labelledby="room-result-heading">
-      <h2 id="room-result-heading">Your room’s best attempts</h2>
-      <div class="room-result__grid">
-        <div><span>One ticket price</span>${bestUniformSummary(roomUniform)}</div>
-        <div><span>Verified student pricing</span>${bestGroupSummary(roomGroup)}</div>
-      </div>
-    </section>
-
-    <section class="comparison" aria-labelledby="benchmark-heading">
-      <div class="section-heading section-heading--centered">
-        <span class="step-kicker">Benchmark</span>
-        <div><h2 id="benchmark-heading">Profit-maximizing outcomes</h2></div>
-      </div>
-      <div class="comparison__grid">
-        <article class="benchmark-card">
-          <span class="benchmark-card__tag">One ticket price</span>
-          <h3>${money(BENCHMARKS.uniform.price)} general admission</h3>
-          <div class="metric"><strong>${BENCHMARKS.uniform.totalQuantity}</strong><span>tickets sold<br>movie fans only</span></div>
-          <dl>
-            <div><dt>Theater profit</dt><dd>${money(BENCHMARKS.uniform.profit)}</dd></div>
-          </dl>
-        </article>
-        <div class="comparison__arrow" aria-hidden="true">→</div>
-        <article class="benchmark-card benchmark-card--accent">
-          <span class="benchmark-card__tag">Verified student pricing</span>
-          <h3>${money(BENCHMARKS.group.highPrice)} general · ${money(BENCHMARKS.group.lowPrice)} student</h3>
-          <div class="metric"><strong>${BENCHMARKS.group.totalQuantity}</strong><span>tickets sold<br>all six seats filled</span></div>
-          <dl>
-            <div><dt>Theater profit</dt><dd>${money(BENCHMARKS.group.profit)}</dd></div>
-          </dl>
-        </article>
-      </div>
-    </section>
-
-    <section class="values-reveal">
-      <div>
-        <span class="eyebrow">Now everyone may look</span>
-        <h2>The most each person would pay</h2>
-      </div>
-      <div class="value-chips"><strong>Movie fans</strong>${MARKETS.high.values.map((value) => `<span>${money(value)}</span>`).join("")}</div>
-      <div class="value-chips"><strong>Students</strong>${MARKETS.low.values.map((value) => `<span>${money(value)}</span>`).join("")}</div>
-    </section>
-
-    <div class="action-panel">
-      <p><strong>Do not calculate alone.</strong> Read each question aloud and use the six willingness-to-pay values as evidence.</p>
-      <button class="button button--primary" type="button" data-action="next-discussion">Open the discussion questions →</button>
-    </div>
-  `);
-}
-
-const DISCUSSION_QUESTIONS = [
-  "If the movie theater can only charge a single price, it is most profitable to charge $8 and leave three seats empty. How can it be profitable to leave empty seats?",
-  "What would happen to the two-price strategy if the theater stopped checking student IDs or allowed tickets to be resold?",
-  "Now suppose the third movie fan would pay only $4 rather than $8—the same as the least eager student. Work out the best one-price policy and the best student-pricing policy. Which one sells more tickets? Does student pricing still increase profit?",
-];
-
-const QUESTION_THREE_VALUES = Object.freeze({
-  high: Object.freeze([10, 9, 4]),
-  low: MARKETS.low.values,
-});
-
-function questionThreeValues() {
-  return `
-    <div class="question-values" role="group" aria-label="Willingness to pay comparison for Question 3">
-      <section class="values-reveal values-reveal--compact">
-        <div><span class="eyebrow">Original values</span><h3>Original willingness to pay</h3></div>
-        <div class="value-chips"><strong>Movie fans</strong>${MARKETS.high.values.map((value) => `<span>${money(value)}</span>`).join("")}</div>
-        <div class="value-chips"><strong>Students</strong>${MARKETS.low.values.map((value) => `<span>${money(value)}</span>`).join("")}</div>
-      </section>
-      <section class="values-reveal values-reveal--compact values-reveal--new">
-        <div><span class="eyebrow">New values</span><h3>New willingness to pay for Question 3</h3></div>
-        <div class="value-chips"><strong>Movie fans</strong>${QUESTION_THREE_VALUES.high.map((value) => `<span>${money(value)}</span>`).join("")}</div>
-        <div class="value-chips"><strong>Students</strong>${QUESTION_THREE_VALUES.low.map((value) => `<span>${money(value)}</span>`).join("")}</div>
-      </section>
-    </div>
-  `;
-}
-
-function discussionQuestionList() {
-  return `
-    <ol class="question-list">
-      ${DISCUSSION_QUESTIONS.map((question, index) => {
-        const number = index + 1;
-        return `
-          <li>
-            <span>0${number}</span>
-            <div>
-              <h2>${question}</h2>
-              ${number === 3 ? questionThreeValues() : ""}
-            </div>
-          </li>
-        `;
+    <ol class="progress" aria-label="Exercise progress">
+      ${steps.map(([id, label], index) => {
+        const status = index < activeIndex
+          ? "is-complete"
+          : index === activeIndex
+            ? "is-active"
+            : "";
+        const current = index === activeIndex ? ' aria-current="step"' : "";
+        return `<li class="${status}"${current}><span>${index + 1}</span>${label}</li>`;
       }).join("")}
     </ol>
   `;
 }
 
-function baselineFacts() {
+function pageShell(content, { activeStep = null, narrow = false, showReset = true } = {}) {
   return `
-    <section class="baseline-facts" aria-label="Facts available for discussion">
-      <article><span>One ticket price</span><strong>$8</strong><p>3 tickets sold · $21 theater profit</p></article>
-      <article><span>Student pricing</span><strong>$8 general · $4 student</strong><p>6 tickets sold · $30 theater profit</p></article>
-      <p class="formula-note">Each attendee costs the theater $1.</p>
+    <div class="page-shell ${narrow ? "page-shell--narrow" : ""}">
+      ${storageNotice()}
+      ${activeStep ? progress(activeStep) : ""}
+      ${content}
+      ${showReset
+        ? '<div class="utility-row"><button class="button button--text" type="button" data-action="reset">Start over on this device</button></div>'
+        : ""}
+    </div>
+  `;
+}
+
+function renderShareGate() {
+  const acknowledged = state.shareAcknowledged;
+  app.innerHTML = `
+    <section class="share-gate">
+      <button
+        class="share-button ${acknowledged ? "is-ready" : ""}"
+        type="button"
+        data-action="${acknowledged ? "start" : "ack-share"}"
+      >${acknowledged ? "Start" : "Share your screen"}</button>
     </section>
   `;
 }
 
-function renderDiscussion() {
+function renderAugustSetup() {
   app.innerHTML = pageShell(`
-    ${spokespersonProgress("discussion")}
-    <section class="discussion-hero">
-      <span class="eyebrow">Work these out together</span>
-      <h1>Three questions.</h1>
-      <p class="lede">The spokesperson reads each question aloud. Talk these through and then we will debrief all together.</p>
-    </section>
-
-    ${baselineFacts()}
-    ${discussionQuestionList()}
-  `);
-}
-
-function renderMarketRole(role) {
-  const marketId = role.id === "high-market" ? "high" : "low";
-  const market = MARKETS[marketId];
-  app.innerHTML = pageShell(
-    `
-      <section class="role-banner role-banner--market role-banner--${marketId}">
-        <span class="role-banner__label">Your private role</span>
-        <h1>${market.label}</h1>
-        <p>You represent three people considering tonight’s movie. Keep their willingness to pay hidden from the theater and the other group.</p>
-      </section>
-
-      <section class="secret-card" aria-labelledby="private-values-heading">
-        <div>
-          <span class="eyebrow">Private information</span>
-          <h2 id="private-values-heading">The most each person would pay for one ticket</h2>
-        </div>
-        <div class="customer-values">
-          ${market.values
-            .map(
-              (value, index) => `
-                <div><span>${marketId === "low" ? "Student" : "Movie fan"} ${index + 1}</span><strong>${money(value)}</strong></div>
-              `,
-            )
-            .join("")}
-        </div>
-        <p class="secret-card__rule">A person buys one ticket when the announced price is less than or equal to their willingness to pay.</p>
-      </section>
-
-      <section class="card demand-tool" aria-labelledby="demand-tool-heading">
-        <div class="section-heading">
-          <span class="step-kicker">Each attempt</span>
-          <div>
-            <h2 id="demand-tool-heading">Report your quantity</h2>
-            <p>Enter the price announced for your market. Say only the resulting number aloud.</p>
-          </div>
-        </div>
-        <form id="demand-form" class="demand-form" novalidate>
-          <label class="field">
-            <span>Price announced to your market</span>
-            <span class="money-input"><span>$</span><input id="market-price" type="number" inputmode="numeric" min="1" max="10" step="1" required></span>
-          </label>
-          <button class="button button--primary" type="submit">Find quantity</button>
-        </form>
-        <div id="demand-error" class="form-error" role="alert"></div>
-        <div id="demand-answer" class="demand-answer" aria-live="polite">
-          <span>Waiting for a price</span>
-          <p>The spokesperson will ask for your answer three times in each treatment.</p>
-        </div>
-      </section>
-
-      <section class="role-reminders">
-        <h2>Your job</h2>
-        <ul>
-          <li>Listen for the price announced to your market.</li>
-          <li>Report how many of your three customers buy: 0, 1, 2, or 3.</li>
-          <li>Do not suggest ticket prices or reveal willingness to pay during play.</li>
-          <li>Follow the spokesperson’s phase announcements.</li>
-        </ul>
-      </section>
-      <section class="participant-reveal-prompt">
-        <div><strong>Has the spokesperson reached the reveal?</strong><p>Do not open this early—it contains both customer groups’ private information.</p></div>
-        <button class="button button--secondary" type="button" data-action="participant-reveal">Open the final reveal</button>
-      </section>
-    `,
-    { narrow: true },
-  );
-}
-
-function renderManagerRole(role) {
-  app.innerHTML = pageShell(
-    `
-      <section class="role-banner role-banner--ceo">
-        <span class="role-banner__label">Your role</span>
-        <h1>Theater manager</h1>
-        <p>Your goal is to maximize profit from tonight’s screening. Tell the spokesperson what to enter on every attempt.</p>
-      </section>
-
-      <div class="ceo-layout">
-        <section class="card">
-          <span class="eyebrow">What you know</span>
-          <h2>Each additional attendee costs the theater $1.</h2>
-          <p>This represents ticketing and cleanup. You do not know what either customer group would pay. Use reported ticket sales and profit to revise your strategy.</p>
-          <div class="formula-box">Ticket profit = (price − $1) × tickets sold</div>
-        </section>
-        <section class="card">
-          <span class="eyebrow">Treatment 1</span>
-          <h2>One ticket price</h2>
-          <p>Choose one whole-dollar general-admission price from $1 through $10. Everyone sees the same price. You get three attempts.</p>
-        </section>
-        <section class="card">
-          <span class="eyebrow">Treatment 2</span>
-          <h2>Verified student pricing</h2>
-          <p>Choose a general-admission price and a student price. Student ID is checked at the door. You get three attempts.</p>
-        </section>
+    <section class="setup-hero">
+      <div>
+        <span class="eyebrow">The Movie Ticket Pricing Challenge</span>
+        <h1>August in a small college town</h1>
+        <p class="lede">College is out of session. Only the town’s 30 local residents are around, and your group runs the only movie theater.</p>
       </div>
-
-      <section class="card decision-pad" aria-labelledby="decision-pad-heading">
-        <div class="section-heading">
-          <span class="step-kicker">Optional notes</span>
-          <div><h2 id="decision-pad-heading">Keep track of your ideas</h2><p>These notes stay only in this tab.</p></div>
-        </div>
-        <label class="field"><span>Prices or strategy to try next</span><textarea rows="5" placeholder="Example: Try a lower price to reach more customers…"></textarea></label>
-      </section>
-      <div class="notice"><strong>Follow the spokesperson.</strong> They run the phases, calculations, and final reveal.</div>
-      <section class="participant-reveal-prompt">
-        <div><strong>Has the spokesperson reached the reveal?</strong><p>Do not open this early—it contains both customer groups’ private information.</p></div>
-        <button class="button button--secondary" type="button" data-action="participant-reveal">Open the final reveal</button>
-      </section>
-    `,
-    { narrow: true },
-  );
-}
-
-function renderParticipantReveal() {
-  app.innerHTML = pageShell(`
-    <section class="discussion-hero">
-      <span class="eyebrow">Work these out together</span>
-      <h1>Three questions.</h1>
-      <p class="lede">Talk these through and then we will debrief all together.</p>
+      <img src="assets/movie-ticket-hero.jpg" alt="Two blank movie tickets beside popcorn in a theater.">
     </section>
 
-    ${baselineFacts()}
-    ${discussionQuestionList()}
-  `);
+    <section class="fact-grid" aria-label="Facts known at the start">
+      <article><strong>60</strong><span>seats in the theater</span></article>
+      <article><strong>30 + 30</strong><span>locals and college students</span></article>
+      <article><strong>$1</strong><span>marginal cost per ticket sold</span></article>
+      <article><strong>3</strong><span>price attempts each month</span></article>
+    </section>
+
+    <section class="card briefing-card">
+      <span class="step-kicker">Your task</span>
+      <h2>Find the ticket price that produces the most profit.</h2>
+      <p>You know the size of each group, but not what anyone is willing to pay. The theater pays a $1 marginal cost for each additional ticket it sells. Enter one whole-dollar price from $1 through $10. After each attempt, the box office will report how many tickets sell and how much profit the theater earns.</p>
+      <div class="formula-box">Profit = ticket revenue − ($1 marginal cost × tickets sold)</div>
+      <button class="button button--primary button--wide" type="button" data-action="begin-august">Open the August box office</button>
+    </section>
+  `, { activeStep: "august" });
+}
+
+function priceField(id, label) {
+  return `
+    <label class="field" for="${id}">
+      <span>${label}</span>
+      <span class="money-input"><span aria-hidden="true">$</span><input id="${id}" type="number" inputmode="numeric" min="${MIN_PRICE}" max="${MAX_PRICE}" step="1" required></span>
+    </label>
+  `;
+}
+
+function renderMetric(label, value, emphasis = false) {
+  return `<div class="result-metric ${emphasis ? "result-metric--accent" : ""}"><span>${label}</span><strong>${value}</strong></div>`;
+}
+
+function renderLatestOutcome(roundId, outcome) {
+  if (!outcome) {
+    return `
+      <div class="empty-state">
+        <strong>Waiting for attempt 1</strong>
+        <span>Your box-office results will appear here.</span>
+      </div>
+    `;
+  }
+  const salesDetail = roundId === "october"
+    ? `${outcome.localQuantity} local · ${outcome.studentQuantity} student`
+    : `${outcome.totalQuantity}`;
+  return `
+    <div class="latest-result" aria-live="polite">
+      <span class="eyebrow">Attempt ${state.attempts[roundId].length} result</span>
+      <div class="result-metrics">
+        ${renderMetric("Tickets sold", salesDetail, true)}
+        ${renderMetric("Seats empty", outcome.seatsEmpty)}
+        ${renderMetric("Revenue", money(outcome.revenue))}
+        ${renderMetric("Total marginal cost", money(outcome.cost))}
+        ${renderMetric("Profit", money(outcome.profit), true)}
+      </div>
+      <p class="calculation-line">${money(outcome.revenue)} revenue − ${money(outcome.cost)} total marginal cost = <strong>${money(outcome.profit)} profit</strong></p>
+    </div>
+  `;
+}
+
+function attemptTable(roundId, attempts) {
+  if (attempts.length === 0) {
+    return "";
+  }
+  const isOctober = roundId === "october";
+  const header = isOctober
+    ? "<tr><th>Try</th><th>Local P</th><th>Student P</th><th>Local Q</th><th>Student Q</th><th>Total Q</th><th>Profit</th></tr>"
+    : "<tr><th>Try</th><th>Price</th><th>Tickets</th><th>Empty</th><th>Revenue</th><th>Cost</th><th>Profit</th></tr>";
+  const rows = attempts.map((attempt, index) => isOctober
+    ? `<tr><td>${index + 1}</td><td>${money(attempt.localPrice)}</td><td>${money(attempt.studentPrice)}</td><td>${attempt.localQuantity}</td><td>${attempt.studentQuantity}</td><td>${attempt.totalQuantity}</td><td><strong>${money(attempt.profit)}</strong></td></tr>`
+    : `<tr><td>${index + 1}</td><td>${money(attempt.price)}</td><td>${attempt.totalQuantity}</td><td>${attempt.seatsEmpty}</td><td>${money(attempt.revenue)}</td><td>${money(attempt.cost)}</td><td><strong>${money(attempt.profit)}</strong></td></tr>`,
+  ).join("");
+  return `<div class="table-wrap"><table><thead>${header}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function roundCopy(roundId) {
+  if (roundId === "august") {
+    return {
+      eyebrow: "August · Locals only",
+      title: "Choose one ticket price",
+      description: "Only 30 locals are in town. The theater has 60 seats.",
+    };
+  }
+  if (roundId === "september") {
+    return {
+      eyebrow: "September · College is in session",
+      title: "Choose one price for everyone",
+      description: "All 30 locals and 30 college students are in town, but everyone must be charged the same price.",
+    };
+  }
+  return {
+    eyebrow: "October · Verified student pricing",
+    title: "Choose a local price and a student price",
+    description: "Student IDs are checked and tickets are nontransferable. You may try any two whole-dollar prices.",
+  };
+}
+
+function renderPlayRound(roundId) {
+  const attempts = state.attempts[roundId];
+  const count = attempts.length;
+  const complete = count === ATTEMPTS_PER_ROUND;
+  const latest = count > 0 ? attempts[count - 1] : null;
+  const copy = roundCopy(roundId);
+  const formId = roundId === "october" ? "segmented-form" : "uniform-form";
+  const fields = roundId === "october"
+    ? `<div class="field-grid field-grid--two">${priceField("local-price", "Price for locals")}${priceField("student-price", "Price for college students")}</div>`
+    : priceField("uniform-price", "Ticket price");
+  app.innerHTML = pageShell(`
+    <section class="phase-heading">
+      <div>
+        <span class="eyebrow">${copy.eyebrow}</span>
+        <h1>${copy.title}</h1>
+        <p>${copy.description}</p>
+      </div>
+      <div class="attempt-count"><strong>${count}</strong><span>of ${ATTEMPTS_PER_ROUND}<br>attempts</span></div>
+    </section>
+
+    <div class="play-layout">
+      <section class="card decision-card">
+        ${complete
+          ? `<span class="step-kicker">Round complete</span><h2>All three prices are recorded.</h2><p>Review your evidence, then see how your group did.</p><button class="button button--primary button--wide" type="button" data-action="review-${roundId}">Review ${ROUNDS[roundId].label}</button>`
+          : `<span class="step-kicker">Attempt ${count + 1}</span><h2>What should the spokesperson enter?</h2><p>Whole-dollar prices from $1 through $10 are allowed.</p><form id="${formId}" data-round="${roundId}" novalidate>${fields}<div id="form-error" class="form-error" role="alert"></div><button class="button button--primary button--wide" type="submit">Set ${roundId === "october" ? "prices" : "price"} and see results</button></form>`
+        }
+      </section>
+      <section class="card result-card">
+        ${renderLatestOutcome(roundId, latest)}
+      </section>
+    </div>
+
+    ${count > 0 ? `
+      <section class="card history-card">
+        <div class="card-heading-row">
+          <div><span class="eyebrow">Evidence so far</span><h2>Your ${ROUNDS[roundId].label} attempts</h2></div>
+        </div>
+        ${attemptTable(roundId, attempts)}
+      </section>
+    ` : ""}
+  `, { activeStep: roundId });
+}
+
+function directionLabel(direction) {
+  return { increase: "Increase", decrease: "Decrease", same: "Stay the same" }[direction] ?? "Not answered";
+}
+
+function predictionCard(roundId, { resolved = false } = {}) {
+  const prediction = state.predictions[roundId];
+  const answers = roundId === "september"
+    ? { profit: "same", quantity: "same" }
+    : { profit: "increase", quantity: "increase" };
+  return `
+    <section class="prediction-receipt ${resolved ? "prediction-receipt--resolved" : ""}">
+      <span class="eyebrow">Your ${ROUNDS[roundId].label} prediction${resolved ? " · resolved" : " · saved"}</span>
+      <div>
+        <p><strong>Maximum profit:</strong> ${directionLabel(prediction.profit)}${resolved ? ` <span class="answer-tag">Answer: ${directionLabel(answers.profit)}</span>` : ""}</p>
+        <p><strong>Tickets sold at the best price:</strong> ${directionLabel(prediction.quantity)}${resolved ? ` <span class="answer-tag">Answer: ${directionLabel(answers.quantity)}</span>` : ""}</p>
+      </div>
+    </section>
+  `;
+}
+
+function bestResultCard(roundId, attempt) {
+  if (!attempt) {
+    return `<article class="best-card"><span>${ROUNDS[roundId].label}</span><strong>No result</strong></article>`;
+  }
+  const priceText = roundId === "october"
+    ? `${money(attempt.localPrice)} local · ${money(attempt.studentPrice)} student`
+    : `${money(attempt.price)} ticket price`;
+  return `
+    <article class="best-card">
+      <span>${ROUNDS[roundId].label}</span>
+      <strong>${money(attempt.profit)} profit</strong>
+      <p>${priceText}<br>${attempt.totalQuantity} sold · ${attempt.seatsEmpty} empty</p>
+    </article>
+  `;
+}
+
+function renderReview(roundId) {
+  const attempts = state.attempts[roundId];
+  const best = bestAttempt(attempts);
+  const priorIds = roundId === "august" ? [] : roundId === "september" ? ["august"] : ["august", "september"];
+  const nextAction = {
+    august: ["predict-september", "September: students return"],
+    september: ["predict-october", "October: add student pricing"],
+    october: ["open-recap", "Recap the exercise"],
+  }[roundId];
+  const comparison = priorIds.length === 0 ? "" : `
+    <section class="comparison-strip" aria-label="Comparison with earlier attempts">
+      ${priorIds.map((priorId) => {
+        const prior = bestAttempt(state.attempts[priorId]);
+        return `<div><span>Compared with your ${ROUNDS[priorId].label} best</span><strong>${signedMoney(best.profit - prior.profit)} profit</strong><small>${best.totalQuantity - prior.totalQuantity >= 0 ? "+" : "−"}${Math.abs(best.totalQuantity - prior.totalQuantity)} tickets</small></div>`;
+      }).join("")}
+    </section>
+  `;
+  app.innerHTML = pageShell(`
+    <section class="review-hero">
+      <span class="eyebrow">${ROUNDS[roundId].label} review</span>
+      <h1>Your room’s best result was ${money(best.profit)}.</h1>
+      <p class="lede">This is your group’s result—not the answer key. The true maximum stays hidden until the final summary.</p>
+    </section>
+    <section class="best-grid best-grid--review">
+      ${bestResultCard(roundId, best)}
+    </section>
+    ${comparison}
+    ${roundId === "august" ? "" : predictionCard(roundId)}
+    <section class="card review-table">
+      <div class="card-heading-row"><div><span class="eyebrow">All three shots</span><h2>${ROUNDS[roundId].label} results</h2></div></div>
+      ${attemptTable(roundId, attempts)}
+    </section>
+    <div class="next-panel">
+      <p>Ready for the next part?</p>
+      <button class="button button--primary" type="button" data-action="${nextAction[0]}">${nextAction[1]} →</button>
+    </div>
+  `, { activeStep: roundId });
+}
+
+function predictionButtons(roundId, kind) {
+  const selected = state.predictions[roundId][kind];
+  return `
+    <div class="prediction-options" role="group" aria-label="${kind === "profit" ? "Maximum profit" : "Tickets sold"} prediction">
+      ${DIRECTIONS.map((direction) => `
+        <button class="prediction-button ${selected === direction ? "is-selected" : ""}" type="button" data-prediction-round="${roundId}" data-prediction-kind="${kind}" data-direction="${direction}" aria-pressed="${selected === direction}">
+          ${directionLabel(direction)}
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderPrediction(roundId) {
+  const isSeptember = roundId === "september";
+  const prediction = state.predictions[roundId];
+  const complete = prediction.profit && prediction.quantity;
+  app.innerHTML = pageShell(`
+    <section class="prediction-hero">
+      <span class="eyebrow">${ROUNDS[roundId].label} · Before setting prices</span>
+      <h1>${isSeptember ? "The college students are back." : "The theater can now offer student pricing."}</h1>
+      <p class="lede">${isSeptember
+        ? "All 60 consumers are now in town, but the theater must still charge everyone the same price."
+        : "The theater may independently choose one price for locals and another for college students. Student IDs are checked, and tickets cannot be transferred."}</p>
+    </section>
+
+    <section class="prediction-card">
+      <span class="step-kicker">Predict together</span>
+      <div class="prediction-question">
+        <h2>Compared with ${isSeptember ? "August" : "September"}, what will happen to the maximum possible profit?</h2>
+        ${predictionButtons(roundId, "profit")}
+      </div>
+      <div class="prediction-question">
+        <h2>At the profit-maximizing price${isSeptember ? "" : "s"}, what will happen to the number of tickets sold?</h2>
+        ${predictionButtons(roundId, "quantity")}
+      </div>
+      <p class="prediction-note">The answers stay hidden until the final summary.</p>
+      <button class="button button--primary button--wide" type="button" data-action="begin-${roundId}" ${complete ? "" : "disabled"}>Lock in the prediction and set prices</button>
+    </section>
+  `, { activeStep: roundId, narrow: true });
+}
+
+function renderRecap() {
+  const bests = Object.fromEntries(Object.keys(ROUNDS).map((roundId) => [roundId, bestAttempt(state.attempts[roundId])]));
+  app.innerHTML = pageShell(`
+    <section class="recap-hero">
+      <span class="eyebrow">Your group’s exercise</span>
+      <h1>Three months at the box office</h1>
+      <p class="lede">These are your room’s best attempts. The market values and profit-maximizing choices are still hidden.</p>
+    </section>
+    <section class="best-grid">
+      ${Object.keys(ROUNDS).map((roundId) => bestResultCard(roundId, bests[roundId])).join("")}
+    </section>
+    <div class="prediction-grid">
+      ${predictionCard("september")}
+      ${predictionCard("october")}
+    </div>
+    <section class="recap-actions">
+      <div><span class="eyebrow">Try again</span><h2>Want another shot?</h2><p>This clears the room’s choices and returns to the screen-sharing button.</p><button class="button button--secondary" type="button" data-action="replay">Redo the exercise</button></div>
+      <div><span class="eyebrow">Reveal</span><h2>Ready to see the market?</h2><p>Open the willingness-to-pay values, optimal choices, and profit charts.</p><button class="button button--primary" type="button" data-action="open-summary">Continue to final summary →</button></div>
+    </section>
+  `, { activeStep: "recap", showReset: false });
+}
+
+function metricList(outcome) {
+  return `
+    <dl>
+      <div><dt>Tickets sold</dt><dd>${outcome.totalQuantity}</dd></div>
+      <div><dt>Seats empty</dt><dd>${outcome.seatsEmpty}</dd></div>
+      <div><dt>Revenue</dt><dd>${money(outcome.revenue)}</dd></div>
+      <div><dt>Cost</dt><dd>${money(outcome.cost)}</dd></div>
+      <div><dt>Profit</dt><dd>${money(outcome.profit)}</dd></div>
+    </dl>
+  `;
+}
+
+function benchmarkCard(roundId) {
+  const benchmark = BENCHMARKS[roundId];
+  const prices = roundId === "october"
+    ? `${money(benchmark.localPrice)} locals · ${money(benchmark.studentPrice)} students`
+    : `${money(benchmark.price)} for everyone`;
+  return `
+    <article class="benchmark-card ${roundId === "october" ? "benchmark-card--accent" : ""}">
+      <span>${ROUNDS[roundId].label}</span>
+      <h3>${prices}</h3>
+      ${metricList(benchmark)}
+    </article>
+  `;
+}
+
+function uniformProfitChart() {
+  const august = uniformProfitSchedule("august");
+  const september = uniformProfitSchedule("september");
+  const width = 900;
+  const height = 350;
+  const left = 56;
+  const baseline = 285;
+  const plotHeight = 245;
+  const scale = plotHeight / 210;
+  const groupWidth = 80;
+  const grid = [0, 50, 100, 150, 200].map((value) => {
+    const y = baseline - value * scale;
+    return `<line class="chart-gridline" x1="${left}" y1="${y}" x2="870" y2="${y}"></line><text class="chart-axis-label" x="48" y="${y + 4}" text-anchor="end">$${value}</text>`;
+  }).join("");
+  const bars = august.map((augustOutcome, index) => {
+    const septemberOutcome = september[index];
+    const x = left + index * groupWidth + 10;
+    const augustHeight = augustOutcome.profit * scale;
+    const septemberHeight = septemberOutcome.profit * scale;
+    return `
+      <rect class="chart-bar chart-bar--august" x="${x}" y="${baseline - augustHeight}" width="26" height="${augustHeight}"><title>August, $${augustOutcome.price} price: $${augustOutcome.profit} profit</title></rect>
+      <rect class="chart-bar chart-bar--september" x="${x + 29}" y="${baseline - septemberHeight}" width="26" height="${septemberHeight}"><title>September, $${septemberOutcome.price} price: $${septemberOutcome.profit} profit</title></rect>
+      <text class="chart-price-label" x="${x + 27}" y="308" text-anchor="middle">$${augustOutcome.price}</text>
+    `;
+  }).join("");
+  const rows = august.map((outcome, index) => `<tr><td>${money(outcome.price)}</td><td>${money(outcome.profit)}</td><td>${money(september[index].profit)}</td></tr>`).join("");
+  return `
+    <section class="chart-card">
+      <div class="chart-heading"><div><span class="eyebrow">One price</span><h2>Profit at every uniform ticket price</h2></div><div class="chart-legend"><span><i class="legend-august"></i>August</span><span><i class="legend-september"></i>September</span></div></div>
+      <div class="chart-scroll"><svg class="profit-chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="uniform-chart-title uniform-chart-desc"><title id="uniform-chart-title">August and September profit by ticket price</title><desc id="uniform-chart-desc">The maximum profit in both months is 210 dollars at an 8 dollar price, even though college students return in September.</desc>${grid}${bars}<text class="chart-axis-title" x="460" y="338" text-anchor="middle">Uniform ticket price</text></svg></div>
+      <details class="chart-data"><summary>View the chart values as a table</summary><div class="table-wrap"><table><thead><tr><th>Price</th><th>August profit</th><th>September profit</th></tr></thead><tbody>${rows}</tbody></table></div></details>
+    </section>
+  `;
+}
+
+function marketProfitChart(marketId) {
+  const schedule = marketProfitSchedule(marketId);
+  const label = MARKETS[marketId].label;
+  const width = 480;
+  const baseline = 255;
+  const plotHeight = 215;
+  const scale = plotHeight / 210;
+  const bars = schedule.map((outcome, index) => {
+    const x = 46 + index * 42;
+    const barHeight = outcome.profit * scale;
+    return `<rect class="chart-bar chart-bar--${marketId}" x="${x}" y="${baseline - barHeight}" width="28" height="${barHeight}"><title>${label}, $${outcome.price} price: $${outcome.profit} profit contribution</title></rect><text class="chart-price-label" x="${x + 14}" y="277" text-anchor="middle">$${outcome.price}</text>`;
+  }).join("");
+  const rows = schedule.map((outcome) => `<tr><td>${money(outcome.price)}</td><td>${outcome.quantity}</td><td>${money(outcome.profit)}</td></tr>`).join("");
+  return `
+    <article class="market-chart">
+      <span class="eyebrow">${label}</span>
+      <h3>Profit contribution by price</h3>
+      <div class="chart-scroll"><svg class="profit-chart profit-chart--small" viewBox="0 0 ${width} 310" role="img" aria-label="${label} profit contribution at each price"><line class="chart-gridline" x1="38" y1="255" x2="466" y2="255"></line>${bars}<text class="chart-axis-title" x="250" y="304" text-anchor="middle">Price for ${marketId}</text></svg></div>
+      <details class="chart-data"><summary>View values</summary><div class="table-wrap"><table><thead><tr><th>Price</th><th>Tickets</th><th>Profit</th></tr></thead><tbody>${rows}</tbody></table></div></details>
+    </article>
+  `;
+}
+
+const DISCUSSION_QUESTIONS = [
+  "Why would a theater choose a price that leaves some seats empty?",
+  "Why does the theater ignore students when they arrive back on campus?",
+  "What would happen here if the students could buy tickets at a discount and then re-sell them to locals?",
+];
+
+function renderSummary() {
+  app.innerHTML = pageShell(`
+    <section class="summary-hero">
+      <span class="eyebrow">The full market revealed</span>
+      <h1>What was hiding behind the box office?</h1>
+      <p class="lede">Each person buys one ticket when the price is no higher than their willingness to pay.</p>
+    </section>
+
+    <section class="market-reveal" aria-labelledby="market-values-heading">
+      <div><span class="step-kicker">Market values</span><h2 id="market-values-heading">The most each person would pay</h2></div>
+      <article><h3>30 locals</h3><div class="value-groups"><span><strong>$10</strong> × 10 people</span><span><strong>$9</strong> × 10 people</span><span><strong>$8</strong> × 10 people</span></div></article>
+      <article><h3>30 college students</h3><div class="value-groups"><span><strong>$6</strong> × 10 people</span><span><strong>$5</strong> × 10 people</span><span><strong>$4</strong> × 10 people</span></div></article>
+      <p class="formula-note">The theater has ${CAPACITY} seats and pays a ${money(MARGINAL_COST)} marginal cost for each ticket sold.</p>
+    </section>
+
+    <section class="benchmark-section">
+      <div class="section-heading"><span class="step-kicker">Profit-maximizing choices</span><div><h2>The economic answer</h2><p>These are the best outcomes among all permitted whole-dollar prices.</p></div></div>
+      <div class="benchmark-grid">${Object.keys(ROUNDS).map(benchmarkCard).join("")}</div>
+    </section>
+
+    <section class="resolved-predictions">
+      <div class="section-heading"><span class="step-kicker">Predictions</span><div><h2>What actually changes?</h2></div></div>
+      <div class="prediction-grid">${predictionCard("september", { resolved: true })}${predictionCard("october", { resolved: true })}</div>
+    </section>
+
+    ${uniformProfitChart()}
+
+    <section class="october-charts">
+      <div class="section-heading"><span class="step-kicker">Two prices</span><div><h2>October profit separates into two parts</h2><p>Choose the best local contribution and the best student contribution, then add them: $210 + $90 = $300.</p></div></div>
+      <div class="market-chart-grid">${marketProfitChart("locals")}${marketProfitChart("students")}</div>
+    </section>
+
+    <section class="discussion-section">
+      <span class="eyebrow">Breakout discussion</span>
+      <h1>In the time remaining, discuss the following questions.</h1>
+      <ol class="question-list">${DISCUSSION_QUESTIONS.map((question, index) => `<li><span>0${index + 1}</span><h2>${question}</h2></li>`).join("")}</ol>
+    </section>
+  `, { activeStep: "summary" });
 }
 
 function showFormError(message) {
-  // The container carries role="alert", so assigning text is what announces the message.
   const error = document.querySelector("#form-error");
   if (error) {
     error.textContent = message;
@@ -686,168 +577,112 @@ function showFormError(message) {
 
 function numberFrom(selector) {
   const field = document.querySelector(selector);
-  return field?.value === "" ? Number.NaN : Number(field.value);
+  return field?.value === "" ? Number.NaN : Number(field?.value);
 }
 
-function submitUniformAttempt() {
-  const report = {
-    price: numberFrom("#uniform-price"),
-    highQuantity: numberFrom("#uniform-high-quantity"),
-    lowQuantity: numberFrom("#uniform-low-quantity"),
-  };
-  const validation = validateUniformReport(report);
-  if (validation.reason === "price") {
-    showFormError("Enter a whole-dollar price from $1 through $10.");
+function saveAttempt(roundId, attempt) {
+  if (state.attempts[roundId].length >= ATTEMPTS_PER_ROUND) {
     return;
   }
-  if (validation.reason === "quantity") {
-    showFormError("Choose the number of tickets sold to both customer groups.");
-    return;
-  }
-  if (validation.reason === "mismatch") {
-    showFormError("One or more ticket totals do not match this price. Ask both customer representatives to check again.");
-    return;
-  }
-
-  state.uniformAttempts.push(
-    makeUniformAttempt(report.price, report.highQuantity, report.lowQuantity),
-  );
-  persistState();
-  render();
+  updateState({
+    attempts: {
+      ...state.attempts,
+      [roundId]: [...state.attempts[roundId], attempt],
+    },
+  });
 }
 
-function submitGroupAttempt() {
-  const report = {
-    highPrice: numberFrom("#group-high-price"),
-    highQuantity: numberFrom("#group-high-quantity"),
-    lowPrice: numberFrom("#group-low-price"),
-    lowQuantity: numberFrom("#group-low-quantity"),
-  };
-  const validation = validateGroupReport(report);
-  if (validation.reason === "price") {
-    showFormError("Enter a whole-dollar general-admission and student price from $1 through $10.");
-    return;
+function submitUniformAttempt(roundId) {
+  const price = numberFrom("#uniform-price");
+  try {
+    saveAttempt(roundId, uniformOutcome(roundId, price));
+  } catch {
+    showFormError(`Enter a whole-dollar price from ${money(MIN_PRICE)} through ${money(MAX_PRICE)}.`);
   }
-  if (validation.reason === "quantity") {
-    showFormError("Choose the number of tickets sold to both customer groups.");
-    return;
-  }
-  if (validation.reason === "mismatch") {
-    showFormError("One or more ticket totals do not match the corresponding price. Ask both customer representatives to check again.");
-    return;
-  }
-
-  state.groupAttempts.push(
-    makeGroupAttempt(
-      report.highPrice,
-      report.highQuantity,
-      report.lowPrice,
-      report.lowQuantity,
-    ),
-  );
-  persistState();
-  render();
 }
 
-function submitDemandCheck() {
-  const price = numberFrom("#market-price");
-  const error = document.querySelector("#demand-error");
-  const answer = document.querySelector("#demand-answer");
-  if (!Number.isInteger(price) || price < 1 || price > 10) {
-    error.textContent = "Enter the whole-dollar ticket price announced by the theater, from $1 through $10.";
-    answer.innerHTML = "<span>Waiting for a valid price</span>";
+function submitSegmentedAttempt() {
+  const localPrice = numberFrom("#local-price");
+  const studentPrice = numberFrom("#student-price");
+  try {
+    saveAttempt("october", segmentedOutcome(localPrice, studentPrice));
+  } catch {
+    showFormError(`Enter two whole-dollar prices from ${money(MIN_PRICE)} through ${money(MAX_PRICE)}.`);
+  }
+}
+
+function handlePrediction(button) {
+  const roundId = button.dataset.predictionRound;
+  const kind = button.dataset.predictionKind;
+  const direction = button.dataset.direction;
+  if (!["september", "october"].includes(roundId) || !["profit", "quantity"].includes(kind) || !DIRECTIONS.includes(direction)) {
     return;
   }
-
-  error.textContent = "";
-  const marketId = state.role === "high-market" ? "high" : "low";
-  const quantity = demandAtPrice(marketId, price);
-  const noun = quantity === 1 ? "customer buys" : "customers buy";
-  answer.innerHTML = `
-    <span>At ${money(price)}:</span>
-    <strong>${quantity}</strong>
-    <p>${noun}. Say <strong>“Quantity ${quantity}”</strong> aloud.</p>
-  `;
+  updateState({
+    predictions: {
+      ...state.predictions,
+      [roundId]: { ...state.predictions[roundId], [kind]: direction },
+    },
+  });
 }
 
 function handleClick(event) {
-  const sizeButton = event.target.closest("[data-group-size]");
-  if (sizeButton) {
-    setState({ groupSize: Number(sizeButton.dataset.groupSize), role: null, phase: "roles" });
+  const predictionButton = event.target.closest("[data-prediction-round]");
+  if (predictionButton) {
+    handlePrediction(predictionButton);
     return;
   }
-
-  const roleButton = event.target.closest("[data-role]");
-  if (roleButton) {
-    setState({ role: roleButton.dataset.role, phase: "setup" });
+  const button = event.target.closest("[data-action]");
+  if (!button) {
     return;
   }
-
-  const actionButton = event.target.closest("[data-action]");
-  if (!actionButton) {
-    return;
-  }
-  const action = actionButton.dataset.action;
-  if (action === "reset") {
-    resetActivity();
-  } else if (action === "change-size") {
-    setState({ groupSize: null, role: null, phase: "landing" });
-  } else if (action === "start-game") {
-    setState({ phase: "uniform" });
-  } else if (action === "remove-uniform") {
-    state.uniformAttempts.pop();
-    persistState();
-    render();
-  } else if (action === "next-group") {
-    setState({ phase: "group" });
-  } else if (action === "remove-group") {
-    state.groupAttempts.pop();
-    persistState();
-    render();
-  } else if (action === "next-reveal") {
-    setState({ phase: "reveal" });
-  } else if (action === "next-discussion") {
-    setState({ phase: "discussion" });
-  } else if (action === "participant-reveal") {
-    setState({ phase: "reveal" });
+  const action = button.dataset.action;
+  const phaseActions = {
+    start: "setup-august",
+    "begin-august": "play-august",
+    "review-august": "review-august",
+    "predict-september": "predict-september",
+    "begin-september": "play-september",
+    "review-september": "review-september",
+    "predict-october": "predict-october",
+    "begin-october": "play-october",
+    "review-october": "review-october",
+    "open-recap": "recap",
+    "open-summary": "summary",
+  };
+  if (action === "ack-share") {
+    updateState({ shareAcknowledged: true });
+  } else if (action === "reset" || action === "replay") {
+    resetActivity(true);
+  } else if (phaseActions[action]) {
+    setPhase(phaseActions[action]);
   }
 }
 
 function handleSubmit(event) {
   event.preventDefault();
   if (event.target.id === "uniform-form") {
-    submitUniformAttempt();
-  } else if (event.target.id === "group-form") {
-    submitGroupAttempt();
-  } else if (event.target.id === "demand-form") {
-    submitDemandCheck();
+    submitUniformAttempt(event.target.dataset.round);
+  } else if (event.target.id === "segmented-form") {
+    submitSegmentedAttempt();
   }
 }
 
 function render() {
-  const role = roleForState(state.groupSize, state.role);
-  if (!state.groupSize || state.phase === "landing") {
-    renderLanding();
-  } else if (!role || state.phase === "roles") {
-    renderRoleSelection();
-  } else if (!role.isSpokesperson) {
-    if (state.phase === "reveal" || state.phase === "discussion") {
-      renderParticipantReveal();
-    } else if (role.id === "theater-manager") {
-      renderManagerRole(role);
-    } else {
-      renderMarketRole(role);
-    }
-  } else if (state.phase === "setup") {
-    renderSpokespersonSetup(role);
-  } else if (state.phase === "uniform") {
-    renderUniformPhase();
-  } else if (state.phase === "group") {
-    renderGroupPhase();
-  } else if (state.phase === "reveal") {
-    renderReveal();
-  } else {
-    renderDiscussion();
+  switch (state.phase) {
+    case "share": renderShareGate(); break;
+    case "setup-august": renderAugustSetup(); break;
+    case "play-august": renderPlayRound("august"); break;
+    case "review-august": renderReview("august"); break;
+    case "predict-september": renderPrediction("september"); break;
+    case "play-september": renderPlayRound("september"); break;
+    case "review-september": renderReview("september"); break;
+    case "predict-october": renderPrediction("october"); break;
+    case "play-october": renderPlayRound("october"); break;
+    case "review-october": renderReview("october"); break;
+    case "recap": renderRecap(); break;
+    case "summary": renderSummary(); break;
+    default: renderShareGate();
   }
   window.scrollTo({ top: 0, behavior: "auto" });
 }

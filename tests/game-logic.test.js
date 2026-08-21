@@ -1,5 +1,5 @@
 /**
- * Verifies the economic rules, benchmarks, roles, and state recovery.
+ * Verifies the 60-person demand model, monthly outcomes, benchmarks, and recovery.
  */
 
 import test from "node:test";
@@ -8,182 +8,178 @@ import assert from "node:assert/strict";
 await import("../game-logic.js");
 
 const {
+  STATE_VERSION,
+  CAPACITY,
+  MARKETS,
   BENCHMARKS,
   demandAtPrice,
-  makeGroupAttempt,
+  uniformOutcome,
+  segmentedOutcome,
+  uniformProfitSchedule,
+  marketProfitSchedule,
   makeInitialState,
-  makeUniformAttempt,
   normalizeStoredState,
-  outcomeForQuantities,
-  profitForGroupPrices,
-  profitForUniformPrice,
-  rolesForGroup,
-  validateGroupReport,
-  validateUniformReport,
-} = globalThis.TwoMarketsGameLogic;
+} = globalThis.MovieTicketGameLogic;
 
-test("demand schedules are correct at every allowed price", () => {
-  const expectedHigh = [3, 3, 3, 3, 3, 3, 3, 3, 2, 1];
-  const expectedLow = [3, 3, 3, 3, 2, 1, 0, 0, 0, 0];
+test("market populations contain ten people at each willingness-to-pay value", () => {
+  assert.equal(MARKETS.locals.values.length, 30);
+  assert.equal(MARKETS.students.values.length, 30);
+  assert.deepEqual(
+    Object.fromEntries([8, 9, 10].map((value) => [value, MARKETS.locals.values.filter((item) => item === value).length])),
+    { 8: 10, 9: 10, 10: 10 },
+  );
+  assert.deepEqual(
+    Object.fromEntries([4, 5, 6].map((value) => [value, MARKETS.students.values.filter((item) => item === value).length])),
+    { 4: 10, 5: 10, 6: 10 },
+  );
+  assert.equal(CAPACITY, 60);
+});
 
+test("demand schedules are correct at every permitted price", () => {
+  const expectedLocals = [30, 30, 30, 30, 30, 30, 30, 30, 20, 10];
+  const expectedStudents = [30, 30, 30, 30, 20, 10, 0, 0, 0, 0];
   for (let price = 1; price <= 10; price += 1) {
-    assert.equal(demandAtPrice("high", price), expectedHigh[price - 1]);
-    assert.equal(demandAtPrice("low", price), expectedLow[price - 1]);
+    assert.equal(demandAtPrice("locals", price), expectedLocals[price - 1]);
+    assert.equal(demandAtPrice("students", price), expectedStudents[price - 1]);
   }
 });
 
-test("prices outside the whole-dollar range are rejected", () => {
-  assert.throws(() => demandAtPrice("high", 0), /whole dollar/);
-  assert.throws(() => demandAtPrice("high", 8.5), /whole dollar/);
-  assert.throws(() => demandAtPrice("low", 11), /whole dollar/);
+test("invalid prices and markets are rejected", () => {
+  assert.throws(() => demandAtPrice("locals", 0), /whole dollar/);
+  assert.throws(() => demandAtPrice("locals", 8.5), /whole dollar/);
+  assert.throws(() => demandAtPrice("students", 11), /whole dollar/);
+  assert.throws(() => demandAtPrice("tourists", 5), /Unknown market/);
 });
 
-test("benchmark profits and total surplus match the lesson", () => {
-  assert.equal(profitForUniformPrice(8, 3, 0), 21);
-  assert.equal(profitForGroupPrices(8, 3, 4, 3), 30);
-  assert.deepEqual(BENCHMARKS.uniform, {
+test("monthly outcomes report sales, empty seats, revenue, cost, and profit", () => {
+  assert.deepEqual(uniformOutcome("august", 8), {
+    roundId: "august",
     price: 8,
-    highQuantity: 3,
-    lowQuantity: 0,
-    totalQuantity: 3,
-    profit: 21,
-    consumerSurplus: 3,
-    totalSurplus: 24,
+    localQuantity: 30,
+    studentQuantity: 0,
+    totalQuantity: 30,
+    seatsEmpty: 30,
+    revenue: 240,
+    cost: 30,
+    profit: 210,
   });
-  assert.deepEqual(BENCHMARKS.group, {
-    highPrice: 8,
-    lowPrice: 4,
-    highQuantity: 3,
-    lowQuantity: 3,
-    totalQuantity: 6,
-    profit: 30,
-    consumerSurplus: 6,
-    totalSurplus: 36,
+  assert.deepEqual(uniformOutcome("september", 4), {
+    roundId: "september",
+    price: 4,
+    localQuantity: 30,
+    studentQuantity: 30,
+    totalQuantity: 60,
+    seatsEmpty: 0,
+    revenue: 240,
+    cost: 60,
+    profit: 180,
+  });
+  assert.deepEqual(segmentedOutcome(8, 4), {
+    roundId: "october",
+    localPrice: 8,
+    studentPrice: 4,
+    localQuantity: 30,
+    studentQuantity: 30,
+    totalQuantity: 60,
+    seatsEmpty: 0,
+    revenue: 360,
+    cost: 60,
+    profit: 300,
   });
 });
 
-test("benchmarks are the unique integer-price profit maxima", () => {
-  const uniformOutcomes = Array.from({ length: 10 }, (_, index) => {
-    const price = index + 1;
-    const highQuantity = demandAtPrice("high", price);
-    const lowQuantity = demandAtPrice("low", price);
-    return {
-      price,
-      profit: profitForUniformPrice(price, highQuantity, lowQuantity),
-    };
-  });
-  const highestUniformProfit = Math.max(...uniformOutcomes.map(({ profit }) => profit));
-  assert.deepEqual(
-    uniformOutcomes.filter(({ profit }) => profit === highestUniformProfit),
-    [{ price: 8, profit: 21 }],
-  );
+test("benchmarks are the unique whole-dollar profit maxima", () => {
+  assert.deepEqual(BENCHMARKS.august, uniformOutcome("august", 8));
+  assert.deepEqual(BENCHMARKS.september, uniformOutcome("september", 8));
+  assert.deepEqual(BENCHMARKS.october, segmentedOutcome(8, 4));
 
-  const groupOutcomes = [];
-  for (let highPrice = 1; highPrice <= 10; highPrice += 1) {
-    for (let lowPrice = 1; lowPrice <= 10; lowPrice += 1) {
-      groupOutcomes.push({
-        highPrice,
-        lowPrice,
-        profit: profitForGroupPrices(
-          highPrice,
-          demandAtPrice("high", highPrice),
-          lowPrice,
-          demandAtPrice("low", lowPrice),
-        ),
-      });
+  for (const roundId of ["august", "september"]) {
+    const schedule = uniformProfitSchedule(roundId);
+    const highestProfit = Math.max(...schedule.map(({ profit }) => profit));
+    assert.deepEqual(schedule.filter(({ profit }) => profit === highestProfit).map(({ price }) => price), [8]);
+  }
+
+  const outcomes = [];
+  for (let localPrice = 1; localPrice <= 10; localPrice += 1) {
+    for (let studentPrice = 1; studentPrice <= 10; studentPrice += 1) {
+      outcomes.push(segmentedOutcome(localPrice, studentPrice));
     }
   }
-  const highestGroupProfit = Math.max(...groupOutcomes.map(({ profit }) => profit));
+  const highestProfit = Math.max(...outcomes.map(({ profit }) => profit));
   assert.deepEqual(
-    groupOutcomes.filter(({ profit }) => profit === highestGroupProfit),
-    [{ highPrice: 8, lowPrice: 4, profit: 30 }],
+    outcomes.filter(({ profit }) => profit === highestProfit).map(({ localPrice, studentPrice }) => ({ localPrice, studentPrice })),
+    [{ localPrice: 8, studentPrice: 4 }],
   );
 });
 
-test("total surplus uses the customers with the highest values first", () => {
-  assert.deepEqual(outcomeForQuantities(2, 1, 9, 6), {
-    totalQuantity: 3,
-    profit: 21,
-    consumerSurplus: 1,
-    totalSurplus: 22,
+test("October accepts arbitrary price pairs", () => {
+  assert.equal(segmentedOutcome(4, 8).profit, 90);
+  assert.equal(segmentedOutcome(6, 6).profit, 200);
+  assert.equal(segmentedOutcome(8, 4).profit, 300);
+});
+
+test("profit schedules expose every whole-dollar choice", () => {
+  assert.deepEqual(
+    uniformProfitSchedule("september").map(({ profit }) => profit),
+    [0, 60, 120, 180, 200, 200, 180, 210, 160, 90],
+  );
+  assert.deepEqual(
+    marketProfitSchedule("students").map(({ profit }) => profit),
+    [0, 30, 60, 90, 80, 50, 0, 0, 0, 0],
+  );
+});
+
+test("initial state starts at the screen-sharing gate", () => {
+  assert.deepEqual(makeInitialState(), {
+    version: STATE_VERSION,
+    phase: "share",
+    shareAcknowledged: false,
+    attempts: { august: [], september: [], october: [] },
+    predictions: {
+      september: { profit: null, quantity: null },
+      october: { profit: null, quantity: null },
+    },
   });
 });
 
-test("reports are checked without returning the incorrect market", () => {
-  assert.deepEqual(
-    validateUniformReport({ price: 8, highQuantity: 3, lowQuantity: 0 }),
-    { valid: true, reason: null },
-  );
-  assert.deepEqual(
-    validateUniformReport({ price: 8, highQuantity: 2, lowQuantity: 0 }),
-    { valid: false, reason: "mismatch" },
-  );
-  assert.deepEqual(
-    validateGroupReport({ highPrice: 8, highQuantity: 3, lowPrice: 4, lowQuantity: 3 }),
-    { valid: true, reason: null },
-  );
-  assert.deepEqual(
-    validateGroupReport({ highPrice: 8, highQuantity: 3, lowPrice: 4, lowQuantity: 2 }),
-    { valid: false, reason: "mismatch" },
-  );
-});
-
-test("groups of three and four expose exactly one spokesperson first", () => {
-  for (const groupSize of [3, 4]) {
-    const roles = rolesForGroup(groupSize);
-    assert.equal(roles.length, groupSize);
-    assert.equal(roles[0].title, "Spokesperson");
-    assert.equal(roles[0].isSpokesperson, true);
-    assert.equal(roles.filter((role) => role.isSpokesperson).length, 1);
-    assert.equal(roles.filter((role) => role.id.endsWith("market")).length, 2);
-  }
-});
-
-test("stored spokesperson state survives normalization and invalid attempts do not", () => {
-  const initial = makeInitialState();
-  const validUniform = makeUniformAttempt(8, 3, 0);
-  const validGroup = makeGroupAttempt(8, 3, 4, 3);
-  const normalized = normalizeStoredState({
-    ...initial,
-    groupSize: 3,
-    role: "combined-controller",
-    phase: "reveal",
-    uniformAttempts: [validUniform, { ...validUniform, highQuantity: 2 }],
-    groupAttempts: [validGroup],
-  });
-
-  assert.equal(normalized.phase, "reveal");
-  assert.deepEqual(normalized.uniformAttempts, [validUniform]);
-  assert.deepEqual(normalized.groupAttempts, [validGroup]);
-});
-
-test("the retired answer-key phase falls back to the landing screen", () => {
+test("stored valid attempts and partial predictions survive normalization", () => {
   const normalized = normalizeStoredState({
     ...makeInitialState(),
-    groupSize: 3,
-    role: "combined-controller",
-    phase: "answers",
+    phase: "predict-september",
+    shareAcknowledged: true,
+    attempts: {
+      august: [uniformOutcome("august", 8)],
+      september: [],
+      october: [],
+    },
+    predictions: {
+      september: { profit: "same", quantity: "invalid" },
+      october: { profit: "increase", quantity: "increase" },
+    },
   });
-
-  assert.equal(normalized.phase, "landing");
+  assert.equal(normalized.phase, "predict-september");
+  assert.equal(normalized.shareAcknowledged, true);
+  assert.deepEqual(normalized.attempts.august, [uniformOutcome("august", 8)]);
+  assert.deepEqual(normalized.predictions.september, { profit: "same", quantity: null });
+  assert.deepEqual(normalized.predictions.october, { profit: "increase", quantity: "increase" });
 });
 
-test("obsolete checked-question data is ignored", () => {
+test("invalid and excess stored attempts are discarded", () => {
+  const valid = uniformOutcome("august", 8);
   const normalized = normalizeStoredState({
     ...makeInitialState(),
-    groupSize: 3,
-    role: "combined-controller",
-    phase: "discussion",
-    checkedQuestions: [1, 3, 1, "2", 9, 0],
+    attempts: {
+      august: [valid, { ...valid, profit: 999 }, valid, valid, valid],
+      september: "not-an-array",
+      october: [segmentedOutcome(8, 4), { ...segmentedOutcome(8, 4), studentQuantity: 20 }],
+    },
   });
-
-  assert.equal(Object.hasOwn(normalized, "checkedQuestions"), false);
+  assert.equal(normalized.attempts.august.length, 3);
+  assert.deepEqual(normalized.attempts.september, []);
+  assert.deepEqual(normalized.attempts.october, [segmentedOutcome(8, 4)]);
 });
 
-test("incompatible stored state resets safely", () => {
+test("legacy state resets safely", () => {
+  assert.deepEqual(normalizeStoredState({ version: 4, phase: "uniform" }), makeInitialState());
   assert.deepEqual(normalizeStoredState({ version: 999 }), makeInitialState());
-  assert.deepEqual(
-    normalizeStoredState({ version: 1, groupSize: 4, role: "not-a-role" }),
-    makeInitialState(),
-  );
 });
