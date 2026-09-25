@@ -114,7 +114,19 @@ p {
   display: grid;
   min-height: 100vh;
   padding: 1.5rem;
-  place-items: center;
+  align-content: center;
+  justify-content: center;
+  justify-items: center;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 40rem);
+}
+
+.share-note {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 1.15rem;
+  text-align: center;
+  text-wrap: balance;
 }
 
 .share-button {
@@ -907,11 +919,23 @@ th {
 
 .chart-axis-label,
 .chart-price-label {
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .chart-axis-title {
-  font-size: 14px;
+  font-size: 17px;
+}
+
+.chart-value-label {
+  fill: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-variant-numeric: lining-nums;
+  font-weight: 600;
+}
+
+.profit-chart--small .chart-value-label {
+  font-size: 15px;
 }
 
 .chart-data {

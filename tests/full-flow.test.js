@@ -17,6 +17,7 @@ test("a spokesperson can complete the full exercise and reach the reveal", async
   const handlers = {};
   const fields = new Map();
   let stored = null;
+  let scrollCount = 0;
   const appElement = {
     innerHTML: "",
     addEventListener(type, handler) { handlers[type] = handler; },
@@ -34,7 +35,7 @@ test("a spokesperson can complete the full exercise and reach the reveal", async
         setItem(_key, value) { stored = value; },
         removeItem() { stored = null; },
       },
-      scrollTo() {},
+      scrollTo() { scrollCount += 1; },
       confirm() { return true; },
     },
   });
@@ -93,7 +94,9 @@ test("a spokesperson can complete the full exercise and reach the reveal", async
   clickAction("review-august");
   assert.match(appElement.innerHTML, /best result was \$210/);
   clickAction("predict-september");
+  const scrollsBeforePrediction = scrollCount;
   clickPrediction("september", "profit", "same");
+  assert.equal(scrollCount, scrollsBeforePrediction, "answering a prediction should not jump to the top");
   clickPrediction("september", "quantity", "same");
   clickAction("begin-september");
 

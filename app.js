@@ -147,6 +147,7 @@ function renderShareGate() {
         type="button"
         data-action="${acknowledged ? "start" : "ack-share"}"
       >${acknowledged ? "Start" : "Share your screen"}</button>
+      <p class="share-note">The spokesperson shares this window in Zoom and enters the group’s choices.</p>
     </section>
   `;
 }
@@ -226,7 +227,7 @@ function attemptTable(roundId, attempts) {
   const isOctober = roundId === "october";
   const header = isOctober
     ? "<tr><th>Try</th><th>Local P</th><th>Student P</th><th>Local Q</th><th>Student Q</th><th>Total Q</th><th>Profit</th></tr>"
-    : "<tr><th>Try</th><th>Price</th><th>Tickets</th><th>Empty</th><th>Revenue</th><th>Cost</th><th>Profit</th></tr>";
+    : "<tr><th>Try</th><th>Price</th><th>Tickets</th><th>Empty</th><th>Revenue</th><th>Total marginal cost</th><th>Profit</th></tr>";
   const rows = attempts.map((attempt, index) => isOctober
     ? `<tr><td>${index + 1}</td><td>${money(attempt.localPrice)}</td><td>${money(attempt.studentPrice)}</td><td>${attempt.localQuantity}</td><td>${attempt.studentQuantity}</td><td>${attempt.totalQuantity}</td><td><strong>${money(attempt.profit)}</strong></td></tr>`
     : `<tr><td>${index + 1}</td><td>${money(attempt.price)}</td><td>${attempt.totalQuantity}</td><td>${attempt.seatsEmpty}</td><td>${money(attempt.revenue)}</td><td>${money(attempt.cost)}</td><td><strong>${money(attempt.profit)}</strong></td></tr>`,
@@ -246,7 +247,7 @@ function roundCopy(roundId) {
     return {
       eyebrow: "September · College is in session",
       title: "Choose one price for everyone",
-      description: "All 30 locals and 30 college students are in town, but everyone must be charged the same price.",
+      description: "All 30 locals and 30 college students are in town, but everyone must be charged the same price. The locals are the same as in August.",
     };
   }
   return {
@@ -355,7 +356,7 @@ function renderReview(roundId) {
   app.innerHTML = pageShell(`
     <section class="review-hero">
       <span class="eyebrow">${ROUNDS[roundId].label} review</span>
-      <h1>Your room’s best result was ${money(best.profit)}.</h1>
+      <h1>Your group’s best result was ${money(best.profit)}.</h1>
       <p class="lede">This is your group’s result—not the answer key. The true maximum stays hidden until the final summary.</p>
     </section>
     <section class="best-grid best-grid--review">
@@ -396,7 +397,7 @@ function renderPrediction(roundId) {
       <span class="eyebrow">${ROUNDS[roundId].label} · Before setting prices</span>
       <h1>${isSeptember ? "The college students are back." : "The theater can now offer student pricing."}</h1>
       <p class="lede">${isSeptember
-        ? "All 60 consumers are now in town, but the theater must still charge everyone the same price."
+        ? "All 60 consumers are now in town, but the theater must still charge everyone the same price. The locals are the same as in August."
         : "The theater may independently choose one price for locals and another for college students. Student IDs are checked, and tickets cannot be transferred."}</p>
     </section>
 
@@ -422,7 +423,7 @@ function renderRecap() {
     <section class="recap-hero">
       <span class="eyebrow">Your group’s exercise</span>
       <h1>Three months at the box office</h1>
-      <p class="lede">These are your room’s best attempts. The market values and profit-maximizing choices are still hidden.</p>
+      <p class="lede">These are your group’s best attempts. The market values and profit-maximizing choices are still hidden.</p>
     </section>
     <section class="best-grid">
       ${Object.keys(ROUNDS).map((roundId) => bestResultCard(roundId, bests[roundId])).join("")}
@@ -432,7 +433,7 @@ function renderRecap() {
       ${predictionCard("october")}
     </div>
     <section class="recap-actions">
-      <div><span class="eyebrow">Try again</span><h2>Want another shot?</h2><p>This clears the room’s choices and returns to the screen-sharing button.</p><button class="button button--secondary" type="button" data-action="replay">Redo the exercise</button></div>
+      <div><span class="eyebrow">Try again</span><h2>Want another shot?</h2><p>This clears the group’s choices and returns to the screen-sharing button.</p><button class="button button--secondary" type="button" data-action="replay">Redo the exercise</button></div>
       <div><span class="eyebrow">Reveal</span><h2>Ready to see the market?</h2><p>Open the willingness-to-pay values, optimal choices, and profit charts.</p><button class="button button--primary" type="button" data-action="open-summary">Continue to final summary →</button></div>
     </section>
   `, { activeStep: "recap", showReset: false });
@@ -444,7 +445,7 @@ function metricList(outcome) {
       <div><dt>Tickets sold</dt><dd>${outcome.totalQuantity}</dd></div>
       <div><dt>Seats empty</dt><dd>${outcome.seatsEmpty}</dd></div>
       <div><dt>Revenue</dt><dd>${money(outcome.revenue)}</dd></div>
-      <div><dt>Cost</dt><dd>${money(outcome.cost)}</dd></div>
+      <div><dt>Total marginal cost</dt><dd>${money(outcome.cost)}</dd></div>
       <div><dt>Profit</dt><dd>${money(outcome.profit)}</dd></div>
     </dl>
   `;
@@ -464,36 +465,43 @@ function benchmarkCard(roundId) {
   `;
 }
 
+function barValueLabel(x, barTop, value) {
+  return `<text class="chart-value-label" x="${x}" y="${barTop - 6}" text-anchor="middle">$${value}</text>`;
+}
+
 function uniformProfitChart() {
   const august = uniformProfitSchedule("august");
   const september = uniformProfitSchedule("september");
   const width = 900;
-  const height = 350;
+  const height = 375;
   const left = 56;
-  const baseline = 285;
+  const baseline = 305;
   const plotHeight = 245;
   const scale = plotHeight / 210;
   const groupWidth = 80;
+  const barWidth = 32;
   const grid = [0, 50, 100, 150, 200].map((value) => {
     const y = baseline - value * scale;
-    return `<line class="chart-gridline" x1="${left}" y1="${y}" x2="870" y2="${y}"></line><text class="chart-axis-label" x="48" y="${y + 4}" text-anchor="end">$${value}</text>`;
+    return `<line class="chart-gridline" x1="${left}" y1="${y}" x2="870" y2="${y}"></line><text class="chart-axis-label" x="48" y="${y + 5}" text-anchor="end">$${value}</text>`;
   }).join("");
   const bars = august.map((augustOutcome, index) => {
     const septemberOutcome = september[index];
-    const x = left + index * groupWidth + 10;
-    const augustHeight = augustOutcome.profit * scale;
-    const septemberHeight = septemberOutcome.profit * scale;
+    const x = left + index * groupWidth + 7;
+    const augustTop = baseline - augustOutcome.profit * scale;
+    const septemberTop = baseline - septemberOutcome.profit * scale;
     return `
-      <rect class="chart-bar chart-bar--august" x="${x}" y="${baseline - augustHeight}" width="26" height="${augustHeight}"><title>August, $${augustOutcome.price} price: $${augustOutcome.profit} profit</title></rect>
-      <rect class="chart-bar chart-bar--september" x="${x + 29}" y="${baseline - septemberHeight}" width="26" height="${septemberHeight}"><title>September, $${septemberOutcome.price} price: $${septemberOutcome.profit} profit</title></rect>
-      <text class="chart-price-label" x="${x + 27}" y="308" text-anchor="middle">$${augustOutcome.price}</text>
+      <rect class="chart-bar chart-bar--august" x="${x}" y="${augustTop}" width="${barWidth}" height="${baseline - augustTop}"><title>August, $${augustOutcome.price} price: $${augustOutcome.profit} profit</title></rect>
+      <rect class="chart-bar chart-bar--september" x="${x + barWidth + 2}" y="${septemberTop}" width="${barWidth}" height="${baseline - septemberTop}"><title>September, $${septemberOutcome.price} price: $${septemberOutcome.profit} profit</title></rect>
+      ${barValueLabel(x + barWidth / 2, augustTop, augustOutcome.profit)}
+      ${barValueLabel(x + barWidth * 1.5 + 2, septemberTop, septemberOutcome.profit)}
+      <text class="chart-price-label" x="${x + barWidth + 1}" y="330" text-anchor="middle">$${augustOutcome.price}</text>
     `;
   }).join("");
   const rows = august.map((outcome, index) => `<tr><td>${money(outcome.price)}</td><td>${money(outcome.profit)}</td><td>${money(september[index].profit)}</td></tr>`).join("");
   return `
     <section class="chart-card">
       <div class="chart-heading"><div><span class="eyebrow">One price</span><h2>Profit at every uniform ticket price</h2></div><div class="chart-legend"><span><i class="legend-august"></i>August</span><span><i class="legend-september"></i>September</span></div></div>
-      <div class="chart-scroll"><svg class="profit-chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="uniform-chart-title uniform-chart-desc"><title id="uniform-chart-title">August and September profit by ticket price</title><desc id="uniform-chart-desc">The maximum profit in both months is 210 dollars at an 8 dollar price, even though college students return in September.</desc>${grid}${bars}<text class="chart-axis-title" x="460" y="338" text-anchor="middle">Uniform ticket price</text></svg></div>
+      <div class="chart-scroll"><svg class="profit-chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="uniform-chart-title uniform-chart-desc"><title id="uniform-chart-title">August and September profit by ticket price</title><desc id="uniform-chart-desc">The maximum profit in both months is 210 dollars at an 8 dollar price, even though college students return in September.</desc><text class="chart-axis-title" x="8" y="18">Profit</text>${grid}${bars}<text class="chart-axis-title" x="460" y="362" text-anchor="middle">Uniform ticket price</text></svg></div>
       <details class="chart-data"><summary>View the chart values as a table</summary><div class="table-wrap"><table><thead><tr><th>Price</th><th>August profit</th><th>September profit</th></tr></thead><tbody>${rows}</tbody></table></div></details>
     </section>
   `;
@@ -503,20 +511,20 @@ function marketProfitChart(marketId) {
   const schedule = marketProfitSchedule(marketId);
   const label = MARKETS[marketId].label;
   const width = 480;
-  const baseline = 255;
+  const baseline = 270;
   const plotHeight = 215;
   const scale = plotHeight / 210;
   const bars = schedule.map((outcome, index) => {
     const x = 46 + index * 42;
-    const barHeight = outcome.profit * scale;
-    return `<rect class="chart-bar chart-bar--${marketId}" x="${x}" y="${baseline - barHeight}" width="28" height="${barHeight}"><title>${label}, $${outcome.price} price: $${outcome.profit} profit contribution</title></rect><text class="chart-price-label" x="${x + 14}" y="277" text-anchor="middle">$${outcome.price}</text>`;
+    const barTop = baseline - outcome.profit * scale;
+    return `<rect class="chart-bar chart-bar--${marketId}" x="${x}" y="${barTop}" width="28" height="${baseline - barTop}"><title>${label}, $${outcome.price} price: $${outcome.profit} profit contribution</title></rect>${barValueLabel(x + 14, barTop, outcome.profit)}<text class="chart-price-label" x="${x + 14}" y="292" text-anchor="middle">$${outcome.price}</text>`;
   }).join("");
   const rows = schedule.map((outcome) => `<tr><td>${money(outcome.price)}</td><td>${outcome.quantity}</td><td>${money(outcome.profit)}</td></tr>`).join("");
   return `
     <article class="market-chart">
       <span class="eyebrow">${label}</span>
       <h3>Profit contribution by price</h3>
-      <div class="chart-scroll"><svg class="profit-chart profit-chart--small" viewBox="0 0 ${width} 310" role="img" aria-label="${label} profit contribution at each price"><line class="chart-gridline" x1="38" y1="255" x2="466" y2="255"></line>${bars}<text class="chart-axis-title" x="250" y="304" text-anchor="middle">Price for ${marketId}</text></svg></div>
+      <div class="chart-scroll"><svg class="profit-chart profit-chart--small" viewBox="0 0 ${width} 330" role="img" aria-label="${label} profit contribution at each price"><text class="chart-axis-title" x="8" y="18">Profit contribution</text><line class="chart-gridline" x1="38" y1="${baseline}" x2="466" y2="${baseline}"></line>${bars}<text class="chart-axis-title" x="250" y="322" text-anchor="middle">Price for ${marketId}</text></svg></div>
       <details class="chart-data"><summary>View values</summary><div class="table-wrap"><table><thead><tr><th>Price</th><th>Tickets</th><th>Profit</th></tr></thead><tbody>${rows}</tbody></table></div></details>
     </article>
   `;
@@ -668,6 +676,8 @@ function handleSubmit(event) {
   }
 }
 
+let lastRenderedPhase = null;
+
 function render() {
   switch (state.phase) {
     case "share": renderShareGate(); break;
@@ -684,7 +694,11 @@ function render() {
     case "summary": renderSummary(); break;
     default: renderShareGate();
   }
-  window.scrollTo({ top: 0, behavior: "auto" });
+  if (state.phase !== lastRenderedPhase) {
+    window.scrollTo({ top: 0, behavior: "auto" });
+    lastRenderedPhase = state.phase;
+  }
+  document.querySelector("#uniform-price, #local-price")?.focus?.({ preventScroll: true });
 }
 
 app.addEventListener("click", handleClick);

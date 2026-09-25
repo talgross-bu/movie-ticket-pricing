@@ -68,6 +68,7 @@ test("fresh experience renders only the screen-sharing button", async () => {
   const rendered = await renderSavedPhase("share", { shareAcknowledged: false });
   assert.equal((rendered.match(/<button/g) ?? []).length, 1);
   assert.match(rendered, />Share your screen<\/button>/);
+  assert.match(rendered, /The spokesperson shares this window in Zoom and enters the group’s choices\./);
   assert.doesNotMatch(rendered, /Movie Ticket Pricing|Start over|progress|img/);
 
   const ready = await renderSavedPhase("share", { shareAcknowledged: true });
@@ -95,6 +96,7 @@ test("monthly play screens use automatic demand feedback and correct information
   const september = await renderSavedPhase("play-september");
   assert.match(september, /All 30 locals and 30 college students/);
   assert.match(september, /everyone must be charged the same price/);
+  assert.match(september, /The locals are the same as in August\./);
 
   const october = await renderSavedPhase("play-october");
   assert.match(october, /Student IDs are checked and tickets are nontransferable/);
@@ -112,6 +114,7 @@ test("prediction screens ask about optimal profit and quantity without revealing
   });
   assert.match(september, /what will happen to the maximum possible profit/);
   assert.match(september, /At the profit-maximizing price/);
+  assert.match(september, /The locals are the same as in August\./);
   assert.match(september, /Increase/);
   assert.match(september, /Decrease/);
   assert.match(september, /Stay the same/);
@@ -144,6 +147,8 @@ test("final summary reveals distributions, optima, charts, predictions, and exac
   assert.match(summary, /Profit at every uniform ticket price/);
   assert.match(summary, /October profit separates into two parts/);
   assert.equal((summary.match(/<svg/g) ?? []).length, 3);
+  assert.equal((summary.match(/class="chart-value-label"/g) ?? []).length, 40);
+  assert.doesNotMatch(summary, /<dt>Cost<\/dt>|room’s/);
   assert.match(summary, /Answer: Stay the same/);
   assert.match(summary, /Answer: Increase/);
   assert.match(summary, /In the time remaining, discuss the following questions\./);
