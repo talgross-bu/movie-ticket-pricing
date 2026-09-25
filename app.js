@@ -273,7 +273,7 @@ function renderPlayRound(roundId) {
         <h1>${copy.title}</h1>
         <p>${copy.description}</p>
       </div>
-      <div class="attempt-count"><strong>${count}</strong><span>of ${ATTEMPTS_PER_ROUND}<br>attempts</span></div>
+      <div class="attempt-count"><strong>${count}</strong><span>of ${ATTEMPTS_PER_ROUND} attempts</span></div>
     </section>
 
     <div class="play-layout">
@@ -563,7 +563,7 @@ function renderSummary() {
     <section class="discussion-section">
       <span class="eyebrow">Breakout discussion</span>
       <h1>In the time remaining, discuss the following questions.</h1>
-      <ol class="question-list">${DISCUSSION_QUESTIONS.map((question, index) => `<li><span>0${index + 1}</span><h2>${question}</h2></li>`).join("")}</ol>
+      <ol class="question-list">${DISCUSSION_QUESTIONS.map((question) => `<li><h2>${question}</h2></li>`).join("")}</ol>
     </section>
   `, { activeStep: "summary" });
 }
